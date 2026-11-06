@@ -55,12 +55,18 @@ jobs:
           - name: MySQL 8.4
             image: mysql:8.4
             driver: mysql
+            port: 3306
+            health: mysqladmin ping -uroot -psecret
           - name: MariaDB 11.4
             image: mariadb:11.4
             driver: mysql
+            port: 3306
+            health: healthcheck.sh --connect --innodb_initialized
           - name: PostgreSQL 17
             image: postgres:17
             driver: pgsql
+            port: 5432
+            health: pg_isready -U postgres
 
     services:
       db:
@@ -72,8 +78,10 @@ jobs:
           MYSQL_DATABASE: tenancy_central
           MARIADB_DATABASE: tenancy_central
           POSTGRES_DB: tenancy_central
-        ports: ['3306:3306', '5432:5432']
-        options: --health-interval=5s --health-timeout=5s --health-retries=20
+        ports: ['${{ matrix.port }}:${{ matrix.port }}']
+        options: >-
+          --health-cmd="${{ matrix.health }}"
+          --health-interval=5s --health-timeout=5s --health-retries=20
 
     env:
       TENANCY_TEST_MYSQL: ${{ matrix.driver == 'mysql' && '1' || '' }}
@@ -92,17 +100,6 @@ jobs:
           coverage: none
 
       - run: composer update --prefer-dist --no-interaction --no-progress
-
-      - name: Wait for the server
-        run: |
-          for i in $(seq 1 60); do
-            if [ "${{ matrix.driver }}" = mysql ]; then
-              mysqladmin ping -h127.0.0.1 -uroot -psecret --silent && break
-            else
-              pg_isready -h 127.0.0.1 -U postgres && break
-            fi
-            sleep 2
-          done
 
       - name: Tests
         run: vendor/bin/pest
