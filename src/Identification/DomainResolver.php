@@ -24,7 +24,8 @@ final class DomainResolver implements TenantResolver
         $key = ResolverCache::domainKey($host);
         $id = $this->cache->remember($key, function () use ($host): ?string {
             $class = config('tenancy.models.domain');
-            $value = $class::query()->where('host', $host)->value('tenant_id');
+            // Unverified domains never resolve: anyone can type a host into a form.
+            $value = $class::query()->where('host', $host)->whereNotNull('verified_at')->value('tenant_id');
 
             return $value === null ? null : (string) $value;
         });

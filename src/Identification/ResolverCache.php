@@ -5,9 +5,7 @@ declare(strict_types=1);
 namespace Atannex\Tenancy\Identification;
 
 use Closure;
-use Illuminate\Contracts\Cache\Factory;
 use Illuminate\Contracts\Cache\Repository as Cache;
-use Illuminate\Contracts\Config\Repository;
 
 /**
  * Host/slug → tenant key. Only hits are cached, so a new domain works at once;
@@ -15,8 +13,6 @@ use Illuminate\Contracts\Config\Repository;
  */
 final class ResolverCache
 {
-    public function __construct(private readonly Factory $cache, private readonly Repository $config) {}
-
     public static function domainKey(string $host): string
     {
         return 'tenancy:domain:'.Hosts::normalize($host);
@@ -30,7 +26,7 @@ final class ResolverCache
     /** @param Closure(): ?string $lookup */
     public function remember(string $key, Closure $lookup): ?string
     {
-        if (! $this->config->get('tenancy.identification.cache.enabled', true)) {
+        if (! config('tenancy.identification.cache.enabled', true)) {
             return $lookup();
         }
 
@@ -43,7 +39,7 @@ final class ResolverCache
         $value = $lookup();
 
         if ($value !== null) {
-            $this->store()->put($key, $value, (int) $this->config->get('tenancy.identification.cache.ttl', 3600));
+            $this->store()->put($key, $value, (int) config('tenancy.identification.cache.ttl', 3600));
         }
 
         return $value;
@@ -56,6 +52,6 @@ final class ResolverCache
 
     private function store(): Cache
     {
-        return $this->cache->store($this->config->get('tenancy.identification.cache.store'));
+        return app('cache')->store(config('tenancy.identification.cache.store'));
     }
 }

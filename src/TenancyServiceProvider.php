@@ -5,6 +5,10 @@ declare(strict_types=1);
 namespace Atannex\Tenancy;
 
 use Illuminate\Contracts\Http\Kernel;
+use Illuminate\Queue\Events\JobExceptionOccurred;
+use Illuminate\Queue\Events\JobFailed;
+use Illuminate\Queue\Events\JobProcessed;
+use Illuminate\Queue\Events\JobProcessing;
 use Illuminate\Support\ServiceProvider;
 use Laravel\Octane\Events\RequestReceived;
 
@@ -18,6 +22,7 @@ final class TenancyServiceProvider extends ServiceProvider
         $this->app->singleton(Tenancy::class);
         $this->app->singleton(Identification\ResolverCache::class);
         $this->app->singleton(Identification\ResolverPipeline::class);
+        $this->app->singleton(Identification\PathDefaults::class);
     }
 
     public function boot(): void
@@ -52,8 +57,22 @@ final class TenancyServiceProvider extends ServiceProvider
         Database\BlueprintMacros::register();
         Database\TenantRules::register();
 
+        $events = $this->app['events'];
+        $events->listen(Events\TenancyInitialized::class, fn (Events\TenancyInitialized $e) => $this->app->make(Identification\PathDefaults::class)->initialized($e->tenant));
+        $events->listen(Events\TenancyEnded::class, fn () => $this->app->make(Identification\PathDefaults::class)->ended());
+
         if ($config->get('tenancy.reset_between_requests', true)) {
-            $this->app->terminating(fn () => $this->app->make(Tenancy::class)->reset());
+            $reset = fn () => $this->app->make(Tenancy::class)->reset();
+
+            $this->app->terminating($reset);
+
+            // A job that forgets to end tenancy must not hand its tenant to the next job.
+            $events->listen([
+                JobProcessing::class,
+                JobProcessed::class,
+                JobFailed::class,
+                JobExceptionOccurred::class,
+            ], $reset);
 
             if (class_exists(RequestReceived::class)) {
                 $this->app['events']->listen(

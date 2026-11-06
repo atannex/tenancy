@@ -8,15 +8,14 @@ use Atannex\Tenancy\Contracts\Tenant;
 use Atannex\Tenancy\Contracts\TenantResolver;
 use Atannex\Tenancy\Tenancy;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\URL;
 
 /**
  * "/{tenant}/..." routes. The parameter is removed from the route so
- * controllers never see it, and set as a URL default so route() keeps it.
+ * controllers never see it, and kept as a URL default (PathDefaults) so route() keeps it.
  */
 final class PathResolver implements TenantResolver
 {
-    public function __construct(private readonly Tenancy $tenancy) {}
+    public function __construct(private readonly Tenancy $tenancy, private readonly PathDefaults $defaults) {}
 
     public function resolve(Request $request): ?Tenant
     {
@@ -32,7 +31,7 @@ final class PathResolver implements TenantResolver
 
         if ($tenant !== null) {
             $route->forgetParameter($parameter);
-            URL::defaults([$parameter => $tenant->getTenantSlug()]);
+            $this->defaults->activate($tenant);
         }
 
         return $tenant;

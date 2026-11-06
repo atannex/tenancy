@@ -13,6 +13,7 @@ use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Support\Carbon;
+use InvalidArgumentException;
 
 /**
  * @property string $id
@@ -41,13 +42,25 @@ class Domain extends Model
 
     protected static function booted(): void
     {
-        $forget = function (self $domain): void {
-            $cache = app(ResolverCache::class);
-            $cache->forget(ResolverCache::domainKey($domain->host));
+        static::saving(function (self $domain): void {
+            foreach ((array) config('tenancy.identification.central_domains', []) as $central) {
+                $central = Hosts::normalize($central);
 
-            if ($domain->isDirty('host') && $domain->getOriginal('host')) {
-                $cache->forget(ResolverCache::domainKey($domain->getOriginal('host')));
+                if ($domain->host === $central || str_ends_with($domain->host, '.'.$central)) {
+                    throw new InvalidArgumentException("Domain [{$domain->host}] is on the central domain [{$central}]; tenant subdomains come from the slug.");
+                }
             }
+        });
+
+        // Forget after commit, so a concurrent request cannot re-cache the old owner.
+        $forget = function (self $domain): void {
+            $hosts = array_filter([$domain->host, $domain->isDirty('host') ? $domain->getOriginal('host') : null]);
+
+            $domain->getConnection()->afterCommit(function () use ($hosts): void {
+                foreach ($hosts as $host) {
+                    app(ResolverCache::class)->forget(ResolverCache::domainKey($host));
+                }
+            });
         };
 
         static::saved($forget);

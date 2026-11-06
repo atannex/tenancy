@@ -15,26 +15,22 @@ use Atannex\Tenancy\Events\TenancyInitializing;
 use Atannex\Tenancy\Exceptions\NoTenantContext;
 use Atannex\Tenancy\Exceptions\TenantNotFound;
 use Closure;
-use Illuminate\Contracts\Config\Repository;
-use Illuminate\Contracts\Container\Container;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use InvalidArgumentException;
 use Throwable;
 
+/**
+ * The tenant context and its bootstrappers. Config and container are read
+ * at the moment of use, never captured, so long-lived workers (Octane,
+ * queues) always see the current ones.
+ */
 final class Tenancy
 {
-    /** @var list<Bootstrapper>|null */
-    private ?array $bootstrappers = null;
-
     /** @var list<Bootstrapper> bootstrappers currently applied, in order */
     private array $applied = [];
 
-    public function __construct(
-        private readonly Container $app,
-        private readonly TenantContext $context,
-        private readonly Repository $config,
-    ) {}
+    public function __construct(private readonly TenantContext $context) {}
 
     public function current(): ?Tenant
     {
@@ -58,7 +54,7 @@ final class Tenancy
 
     public function strict(): bool
     {
-        return (bool) $this->config->get('tenancy.strict', true);
+        return (bool) config('tenancy.strict', true);
     }
 
     public function initialize(Tenant|string $tenant): Tenant
@@ -77,7 +73,10 @@ final class Tenancy
         }
 
         $left = $this->context->pop();
-        $this->transition($left, $this->context->current());
+
+        if ($error = $this->transition($left, $this->context->current())) {
+            throw $error;
+        }
     }
 
     /**
@@ -91,11 +90,7 @@ final class Tenancy
         $depth = $this->context->depth();
         $tenant = $this->initialize($tenant);
 
-        try {
-            return $callback($tenant);
-        } finally {
-            $this->unwindTo($depth);
-        }
+        return $this->guarded($depth, fn () => $callback($tenant));
     }
 
     /**
@@ -111,11 +106,7 @@ final class Tenancy
         $depth = $this->context->depth();
         $this->enter(null);
 
-        try {
-            return $callback();
-        } finally {
-            $this->unwindTo($depth);
-        }
+        return $this->guarded($depth, $callback);
     }
 
     /**
@@ -149,6 +140,7 @@ final class Tenancy
         $this->unwindTo(0);
     }
 
+    /** By exact key first, then by slug. */
     public function find(string $keyOrSlug): ?Tenant
     {
         if ($keyOrSlug === '') {
@@ -156,9 +148,13 @@ final class Tenancy
         }
 
         /** @var (Model&Tenant)|null */
-        return $this->query()
-            ->where(fn (Builder $q) => $q->whereKey($keyOrSlug)->orWhere('slug', strtolower($keyOrSlug)))
-            ->first();
+        return $this->findByKey($keyOrSlug) ?? $this->query()->where('slug', strtolower($keyOrSlug))->first();
+    }
+
+    public function findByKey(string $key): ?Tenant
+    {
+        /** @var (Model&Tenant)|null */
+        return $key === '' ? null : $this->query()->whereKey($key)->first();
     }
 
     public function findOrFail(string $keyOrSlug): Tenant
@@ -175,26 +171,26 @@ final class Tenancy
     /** @return class-string<Model&Tenant> */
     public function model(): string
     {
-        return $this->config->get('tenancy.models.tenant');
+        return config('tenancy.models.tenant');
     }
 
     public function centralConnection(): string
     {
-        return (string) ($this->config->get('tenancy.database.central_connection') ?: $this->config->get('database.default'));
+        return (string) (config('tenancy.database.central_connection') ?: config('database.default'));
     }
 
     /** @return list<Bootstrapper> */
     public function bootstrappers(): array
     {
-        return $this->bootstrappers ??= array_map(function (string $class): Bootstrapper {
-            $bootstrapper = $this->app->make($class);
+        return array_map(function (string $class): Bootstrapper {
+            $bootstrapper = app($class);
 
             if (! $bootstrapper instanceof Bootstrapper) {
                 throw new InvalidArgumentException("[{$class}] must implement ".Bootstrapper::class.'.');
             }
 
             return $bootstrapper;
-        }, array_values((array) $this->config->get('tenancy.bootstrappers', [])));
+        }, array_values((array) config('tenancy.bootstrappers', [])));
     }
 
     private function newModel(): Model
@@ -209,62 +205,124 @@ final class Tenancy
         return $model;
     }
 
+    /** Run $callback, then unwind to $depth without ever masking the callback's own exception. */
+    private function guarded(int $depth, Closure $callback): mixed
+    {
+        try {
+            $result = $callback();
+        } catch (Throwable $e) {
+            try {
+                $this->unwindTo($depth);
+            } catch (Throwable $unwind) {
+                report($unwind);
+            }
+
+            throw $e;
+        }
+
+        $this->unwindTo($depth);
+
+        return $result;
+    }
+
     private function enter(?Tenant $tenant): void
     {
         $from = $this->context->current();
 
         try {
-            $this->transition($from, $tenant);
+            $revertError = $this->transition($from, $tenant);
         } catch (Throwable $e) {
-            $this->revertApplied();
-
-            if ($from !== null) {
-                $this->transition(null, $from);
+            if ($from !== null && $this->applied === []) {
+                try {
+                    $this->transition(null, $from);
+                } catch (Throwable) {
+                    // Nothing applied; the original failure is what matters.
+                }
             }
 
             throw $e;
         }
 
         $this->context->push($tenant);
+
+        if ($revertError !== null) {
+            throw $revertError;
+        }
     }
 
     private function unwindTo(int $depth): void
     {
+        $error = null;
+
         while ($this->context->depth() > $depth) {
-            $this->end();
+            try {
+                $this->end();
+            } catch (Throwable $e) {
+                $error ??= $e;
+            }
+        }
+
+        if ($error !== null) {
+            throw $error;
         }
     }
 
-    private function transition(?Tenant $from, ?Tenant $to): void
+    /**
+     * Move the bootstrappers from one tenant to another. Afterwards either
+     * $to is fully applied, or nothing is (and the bootstrap failure is
+     * thrown). A failure reverting $from is returned, not thrown, so callers
+     * can record the new frame first and keep context and bootstrappers in step.
+     */
+    private function transition(?Tenant $from, ?Tenant $to): ?Throwable
     {
         if ($from?->getTenantKey() === $to?->getTenantKey()) {
-            return;
+            return null;
         }
 
+        $events = app('events');
+        $revertError = null;
+
         if ($from !== null) {
-            $this->app->make('events')->dispatch(new TenancyEnding($from));
-            $this->revertApplied();
-            $this->app->make('events')->dispatch(new TenancyEnded($from));
+            $events->dispatch(new TenancyEnding($from));
+            $revertError = $this->revertApplied();
+            $events->dispatch(new TenancyEnded($from));
         }
 
         if ($to !== null) {
-            $this->app->make('events')->dispatch(new TenancyInitializing($to));
+            $events->dispatch(new TenancyInitializing($to));
 
-            foreach ($this->bootstrappers() as $bootstrapper) {
-                $bootstrapper->bootstrap($to);
-                $this->applied[] = $bootstrapper;
+            try {
+                foreach ($this->bootstrappers() as $bootstrapper) {
+                    $bootstrapper->bootstrap($to);
+                    $this->applied[] = $bootstrapper;
+                }
+            } catch (Throwable $e) {
+                $this->revertApplied();
+
+                throw $e;
             }
 
-            $this->app->make('events')->dispatch(new TenancyInitialized($to));
+            $events->dispatch(new TenancyInitialized($to));
         }
+
+        return $revertError;
     }
 
-    private function revertApplied(): void
+    /** Revert everything applied, continuing past failures; returns the first one. */
+    private function revertApplied(): ?Throwable
     {
+        $error = null;
+
         foreach (array_reverse($this->applied) as $bootstrapper) {
-            $bootstrapper->revert();
+            try {
+                $bootstrapper->revert();
+            } catch (Throwable $e) {
+                $error ??= $e;
+            }
         }
 
         $this->applied = [];
+
+        return $error;
     }
 }

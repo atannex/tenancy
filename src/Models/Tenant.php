@@ -79,22 +79,32 @@ class Tenant extends Model implements TenantContract
                 throw new InvalidArgumentException("Tenant slug [{$tenant->slug}] must be one DNS label: a-z, 0-9 and inner hyphens, at most 63 characters.");
             }
 
+            if (Str::isUlid($tenant->slug) || Str::isUuid($tenant->slug)) {
+                throw new InvalidArgumentException("Tenant slug [{$tenant->slug}] looks like a tenant key; slugs and keys must never collide.");
+            }
+
             if (in_array($tenant->slug, (array) config('tenancy.reserved_slugs', []), true)) {
                 throw new InvalidArgumentException("Tenant slug [{$tenant->slug}] is reserved.");
             }
         });
 
+        // Forget after commit, so a concurrent request cannot re-cache stale keys.
         $forget = function (self $tenant): void {
-            $cache = app(ResolverCache::class);
-            $cache->forget(ResolverCache::slugKey($tenant->slug));
+            $keys = [ResolverCache::slugKey($tenant->slug)];
 
             if ($tenant->getOriginal('slug')) {
-                $cache->forget(ResolverCache::slugKey($tenant->getOriginal('slug')));
+                $keys[] = ResolverCache::slugKey($tenant->getOriginal('slug'));
             }
 
             foreach ($tenant->domains()->pluck('host') as $host) {
-                $cache->forget(ResolverCache::domainKey($host));
+                $keys[] = ResolverCache::domainKey($host);
             }
+
+            $tenant->getConnection()->afterCommit(function () use ($keys): void {
+                foreach ($keys as $key) {
+                    app(ResolverCache::class)->forget($key);
+                }
+            });
         };
 
         static::saved($forget);

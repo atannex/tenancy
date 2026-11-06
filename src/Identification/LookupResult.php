@@ -17,7 +17,7 @@ final class LookupResult
             return null;
         }
 
-        $tenant = $tenancy->find($id);
+        $tenant = $tenancy->findByKey($id);
 
         if ($tenant === null) {
             $cache->forget($key);

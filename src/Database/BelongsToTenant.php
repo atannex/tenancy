@@ -55,7 +55,39 @@ trait BelongsToTenant
             if ($model->isDirty($model->getTenantColumn())) {
                 throw TenantMismatch::immutable($model::class);
             }
+
+            $model->assertWritableInContext();
         });
+
+        // Saves and deletes of a loaded instance skip global scopes; check ownership here.
+        static::deleting(function (Model $model): void {
+            /** @var Model&self $model */
+            $model->assertWritableInContext();
+        });
+    }
+
+    /** Use the guarded builder. Models with their own builder use GuardsTenantWrites on it. */
+    public function newEloquentBuilder($query): TenantBuilder
+    {
+        return new TenantBuilder($query);
+    }
+
+    protected function assertWritableInContext(): void
+    {
+        $tenancy = app(Tenancy::class);
+        $current = $tenancy->current();
+
+        if ($current !== null) {
+            if ((string) $this->getOriginal($this->getTenantColumn()) !== $current->getTenantKey()) {
+                throw TenantMismatch::foreignRow(static::class);
+            }
+
+            return;
+        }
+
+        if (! $tenancy->inCentral() && $tenancy->strict()) {
+            throw NoTenantContext::forModel(static::class);
+        }
     }
 
     public function tenant(): BelongsTo

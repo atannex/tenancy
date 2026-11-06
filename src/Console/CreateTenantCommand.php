@@ -24,7 +24,8 @@ final class CreateTenantCommand extends Command
                 $tenant = $model::create(['name' => $this->argument('name'), 'slug' => $this->option('slug')]);
 
                 foreach (array_values((array) $this->option('domain')) as $i => $host) {
-                    $tenant->domains()->create(['host' => $host, 'type' => $i === 0 ? DomainType::Primary : DomainType::Alias]);
+                    // An operator at the console vouches for these domains.
+                    $tenant->domains()->create(['host' => $host, 'type' => $i === 0 ? DomainType::Primary : DomainType::Alias, 'verified_at' => now()]);
                 }
 
                 return $tenant;

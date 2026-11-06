@@ -16,6 +16,16 @@ final class TenantMismatch extends TenancyException
         return new self("Cannot create a [{$model}] for another tenant from inside a tenant.");
     }
 
+    public static function foreignRow(string $model): self
+    {
+        return new self("This [{$model}] belongs to another tenant.");
+    }
+
+    public static function upsertKey(string $model, string $column): self
+    {
+        return new self("Upserts of [{$model}] must include [{$column}] in uniqueBy, or they can overwrite another tenant's rows.");
+    }
+
     public function getStatusCode(): int
     {
         return 409;

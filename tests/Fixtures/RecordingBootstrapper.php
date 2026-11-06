@@ -14,6 +14,8 @@ final class RecordingBootstrapper implements Bootstrapper
 
     public static ?string $failFor = null;
 
+    public static bool $failRevert = false;
+
     public function bootstrap(Tenant $tenant): void
     {
         if (self::$failFor === $tenant->getTenantSlug()) {
@@ -25,6 +27,12 @@ final class RecordingBootstrapper implements Bootstrapper
 
     public function revert(): void
     {
+        if (self::$failRevert) {
+            self::$failRevert = false;
+
+            throw new \RuntimeException('revert failed');
+        }
+
         self::$log[] = 'down';
     }
 }
