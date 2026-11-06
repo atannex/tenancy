@@ -9,6 +9,7 @@ use Atannex\Tenancy\Events\InvitationAccepted;
 use Atannex\Tenancy\Events\InvitationRevoked;
 use Atannex\Tenancy\Events\InvitationSent;
 use Atannex\Tenancy\Exceptions\InvitationInvalid;
+use Atannex\Tenancy\Exceptions\NotAMember;
 use Atannex\Tenancy\Models\Invitation;
 use Atannex\Tenancy\Models\Membership;
 use Atannex\Tenancy\Tenancy;
@@ -27,6 +28,11 @@ final class Invitations
     {
         $role ??= (string) config('tenancy.people.default_role', 'member');
         $this->roles->assertExists($role);
+
+        if ($role === 'owner' && $invitedBy !== null && $this->members->find($tenant, $invitedBy)?->role !== 'owner') {
+            throw NotAMember::of($tenant->getTenantSlug());
+        }
+
         $this->members->assertSeatAvailable($tenant);
 
         $token = Str::random(64);
@@ -70,7 +76,9 @@ final class Invitations
         $tenant = app(Tenancy::class)->findByKey($invitation->tenant_id) ?? throw InvitationInvalid::notFound();
 
         return DB::connection(app(Tenancy::class)->centralConnection())->transaction(function () use ($invitation, $user, $tenant) {
-            $membership = $this->members->add($tenant, $user, $invitation->role, Users::find($invitation->invited_by));
+            // An existing member keeps their role; an invitation never changes it.
+            $existing = $this->members->find($tenant, $user);
+            $membership = $existing?->isActive() ? $existing : $this->members->add($tenant, $user, $invitation->role, Users::find($invitation->invited_by));
             $invitation->update(['accepted_at' => now(), 'accepted_by' => Users::key($user)]);
             event(new InvitationAccepted($tenant, $invitation, $membership));
 

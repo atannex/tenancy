@@ -72,7 +72,15 @@ final class Impersonations
             throw ImpersonationDenied::notMember();
         }
 
-        $record->update(['used_at' => now(), 'ip' => app()->bound('request') ? request()->ip() : null]);
+        // Claim it atomically: only one request may ever redeem a token.
+        $claimed = Impersonation::query()->whereKey($record->getKey())->whereNull('used_at')
+            ->update(['used_at' => now(), 'ip' => app()->bound('request') ? request()->ip() : null]);
+
+        if ($claimed !== 1) {
+            throw ImpersonationDenied::used();
+        }
+
+        $record->refresh();
 
         $this->guard()->login($user);
         app('session')->put(self::SESSION_KEY, $record->getKey());

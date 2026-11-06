@@ -20,6 +20,9 @@ class InitializeTenancy
 {
     protected bool $required = true;
 
+    /** Runs after the session and authentication (tenant.session). */
+    protected bool $late = false;
+
     public function __construct(
         protected readonly Tenancy $tenancy,
         protected readonly ResolverPipeline $pipeline,
@@ -27,6 +30,10 @@ class InitializeTenancy
 
     public function handle(Request $request, Closure $next, string ...$resolvers): Response
     {
+        if (! $this->late && array_intersect($resolvers, ['session', 'user']) !== []) {
+            throw new \InvalidArgumentException('The session and user resolvers need the session and the signed-in user: use the tenant.session middleware.');
+        }
+
         if ($this->tenancy->initialized()) {
             return $next($request);
         }

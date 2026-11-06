@@ -45,6 +45,7 @@ return [
         'sqlite_path' => null, // null = database_path('tenants')
         // Give each dedicated tenant its own database login (MySQL/MariaDB/PostgreSQL).
         'dedicated_users' => false,
+        'user_prefix' => 't_', // logins are prefix + a hash of the tenant key, at most 32 characters
         'user_hosts' => ['%', 'localhost'], // MySQL/MariaDB account hosts for dedicated users
         // Tier for new tenants: shared | schema | database.
         'default_tier' => 'shared',
@@ -185,7 +186,8 @@ return [
     'api' => [
         'enabled' => false,
         'prefix' => 'tenancy-api',
-        'middleware' => ['api', 'auth:sanctum', 'abilities:tenancy:manage'],
+        // Define Gate::define('tenancy.manage', …) for your platform staff.
+        'middleware' => ['api', 'auth:sanctum', 'can:tenancy.manage'],
     ],
 
     'migrations' => [

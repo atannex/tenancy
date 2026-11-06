@@ -19,7 +19,7 @@ final class Maintenance
 {
     public const string PARAMETER = 'tenancy_secret';
 
-    /** @param array{secret?: ?string, retry?: ?int, message?: ?string} $options */
+    /** @param array{secret?: ?string, retry?: ?int, message?: ?string, hold_jobs?: bool} $options */
     public function down(Tenant&Model $tenant, array $options = []): void
     {
         $data = (array) ($tenant->getAttribute('data') ?? []);
@@ -27,6 +27,7 @@ final class Maintenance
             'secret' => empty($options['secret']) ? null : hash('sha256', (string) $options['secret']),
             'retry' => $options['retry'] ?? null,
             'message' => $options['message'] ?? null,
+            'hold_jobs' => (bool) ($options['hold_jobs'] ?? false),
             'since' => now()->toIso8601String(),
         ];
 
@@ -38,6 +39,12 @@ final class Maintenance
         $data = (array) ($tenant->getAttribute('data') ?? []);
         unset($data['maintenance']);
         $tenant->forceFill(['data' => $data])->save();
+    }
+
+    /** While data moves, the tenant's queued jobs wait. */
+    public function holdsJobs(Tenant $tenant): bool
+    {
+        return (bool) ($this->state($tenant)['hold_jobs'] ?? false);
     }
 
     public function isDown(Tenant $tenant): bool

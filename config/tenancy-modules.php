@@ -54,6 +54,9 @@ return [
             'viewer' => ['*.view'],
         ],
         'default_role' => 'member',
+        // The abilities tenant roles may answer through the Gate. Everything else is left to your
+        // own policies, so a tenant owner never passes central checks. Add your tenant abilities.
+        'gate_abilities' => ['members.*', 'settings.*', 'billing.*', 'tenant.*'],
         'gate' => true,
 
         // Quota key that limits active members; null = no seat limit.

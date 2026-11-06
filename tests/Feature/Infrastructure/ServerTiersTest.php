@@ -11,7 +11,7 @@ use Atannex\Tenancy\Tests\Fixtures\Models\Note;
 use Illuminate\Support\Facades\DB;
 
 /*
- * Opt-in: real servers. Only databases, schemas and users named tenancy_test_* are touched.
+ * Opt-in: real servers. Only databases/schemas named tenancy_test_* and logins named tenancy_t_* are touched.
  *   TENANCY_TEST_MYSQL=1 [TENANCY_TEST_MYSQL_HOST, _PORT, _USERNAME, _PASSWORD]
  *   TENANCY_TEST_PGSQL=1 [TENANCY_TEST_PGSQL_HOST, _PORT, _USERNAME, _PASSWORD, _DATABASE]
  */
@@ -86,7 +86,7 @@ it('gives tenants their own login when dedicated_users is on', function () {
     }
 
     useServer('mysql');
-    config(['tenancy.database.dedicated_users' => true]);
+    config(['tenancy.database.dedicated_users' => true, 'tenancy.database.user_prefix' => 'tenancy_t_']);
     $db = app(TenantDatabase::class);
     $a = Tenant::factory()->create(['isolation' => IsolationTier::Database]);
 
@@ -94,7 +94,7 @@ it('gives tenants their own login when dedicated_users is on', function () {
         $db->create($a);
         $connection = $a->fresh()->connection;
 
-        expect($connection['username'])->toStartWith('tenancy_test_')
+        expect($connection['username'])->toStartWith('tenancy_t_')->toHaveLength(32)
             ->and(Tenancy::run($a->fresh(), fn () => DB::selectOne('select current_user() as u')->u))->toStartWith($connection['username'].'@');
     } finally {
         Tenancy::reset();

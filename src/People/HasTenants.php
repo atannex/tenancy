@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Atannex\Tenancy\People;
 
 use Atannex\Tenancy\Contracts\Tenant;
+use Atannex\Tenancy\Database\OnCentralConnection;
 use Atannex\Tenancy\Enums\MembershipStatus;
 use Atannex\Tenancy\Exceptions\NotAMember;
 use Atannex\Tenancy\Models\Membership;
@@ -23,6 +24,9 @@ use Illuminate\Database\Eloquent\Model;
  */
 trait HasTenants
 {
+    // Users are central: on dedicated tiers the default connection points at the tenant.
+    use OnCentralConnection;
+
     /** @return Builder<Membership> */
     public function memberships(): Builder
     {

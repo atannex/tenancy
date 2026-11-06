@@ -46,6 +46,7 @@ final class Importer
             throw new RuntimeException("[{$path}] is not a tenant export.");
         }
 
+        $this->assertSafeFiles($zip);
         $source = (array) $manifest['tenant'];
         $tenant = $this->provisioner->create($attributes + [
             'name' => $source['name'],
@@ -72,15 +73,46 @@ final class Importer
         return $tenant;
     }
 
+    /** Files may only land inside the new tenant's folder on the tenancy disks. */
+    private function assertSafeFiles(ZipArchive $zip): void
+    {
+        $disks = (array) config('tenancy.filesystem.disks', []);
+
+        for ($i = 0; $i < $zip->numFiles; $i++) {
+            $name = (string) $zip->getNameIndex($i);
+
+            if (! str_starts_with($name, 'files/')) {
+                continue;
+            }
+
+            $parts = explode('/', substr($name, 6));
+            $disk = array_shift($parts);
+            $unsafe = $parts === [] || in_array('', $parts, true) || in_array('..', $parts, true) || in_array('.', $parts, true) || str_contains($name, '\\');
+
+            if ($unsafe || ! in_array($disk, $disks, true) || ! config("filesystems.disks.{$disk}")) {
+                throw new RuntimeException("Import refuses file [{$name}].");
+            }
+        }
+    }
+
     /** @param list<string> $tables */
     private function restore(ZipArchive $zip, Tenant&Model $tenant, array $tables): void
     {
         $this->tenancy->central(function () use ($zip, $tenant, $tables): void {
             $connection = $this->tables->connection($tenant);
-            $column = (string) config('tenancy.database.tenant_column', 'tenant_id');
+            // Only the new tenant's own tables, each with its own tenant column.
+            $allowed = $this->tables->for($tenant);
+            $default = (string) config('tenancy.database.tenant_column', 'tenant_id');
 
-            $connection->transaction(function () use ($zip, $tenant, $tables, $connection, $column): void {
+            foreach ($tables as $table) {
+                if (! array_key_exists($table, $allowed)) {
+                    throw new RuntimeException("Import refuses table [{$table}]: it is not tenant data.");
+                }
+            }
+
+            $connection->transaction(function () use ($zip, $tenant, $tables, $connection, $allowed, $default): void {
                 foreach ($tables as $table) {
+                    $column = $allowed[$table] ?? $default;
                     $lines = array_filter(explode("\n", (string) $zip->getFromName("tables/{$table}.jsonl")));
                     $rows = array_map(function (string $line) use ($tenant, $column): array {
                         $row = json_decode($line, true, flags: JSON_THROW_ON_ERROR);
@@ -98,7 +130,7 @@ final class Importer
             for ($i = 0; $i < $zip->numFiles; $i++) {
                 $name = (string) $zip->getNameIndex($i);
 
-                if (preg_match('#^files/([^/]+)/(.+)$#', $name, $m) && config("filesystems.disks.{$m[1]}")) {
+                if (preg_match('#^files/([^/]+)/(.+)$#', $name, $m)) {
                     Storage::disk($m[1])->put(FilesystemBootstrapper::suffix($tenant).'/'.$m[2], (string) $zip->getFromIndex($i));
                 }
             }

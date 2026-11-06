@@ -33,7 +33,7 @@ final class MySqlDatabaseManager extends ServerManager implements ManagesDatabas
         $user = $this->identifier($username);
 
         foreach ($this->hosts() as $host) {
-            $admin->statement("CREATE USER IF NOT EXISTS '{$user}'@'{$host}' IDENTIFIED BY '{$this->password($password)}'");
+            $admin->statement("CREATE USER '{$user}'@'{$host}' IDENTIFIED BY '{$this->password($password)}'");
             $admin->statement("GRANT ALL PRIVILEGES ON `{$this->identifier($database)}`.* TO '{$user}'@'{$host}'");
         }
     }

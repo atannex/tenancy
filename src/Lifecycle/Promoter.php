@@ -48,7 +48,7 @@ final class Promoter
 
         $this->tenancy->central(function () use ($tenant, $from, $to, $deleteSource): void {
             $wasDown = $this->maintenance->isDown($tenant);
-            $wasDown || $this->maintenance->down($tenant, ['message' => 'Moving data, back shortly.', 'retry' => 60]);
+            $wasDown || $this->maintenance->down($tenant, ['message' => 'Moving data, back shortly.', 'retry' => 60, 'hold_jobs' => true]);
             $sourceTables = $this->tables->for($tenant, $from);
             $source = $this->tables->connection($tenant, $from);
 
@@ -62,13 +62,18 @@ final class Promoter
                 throw $e;
             }
 
-            $tenant->forceFill(['isolation' => $to])->save();
+            $data = (array) ($tenant->getAttribute('data') ?? []);
 
             if ($deleteSource) {
                 $from === IsolationTier::Shared
                     ? $this->deleteRows(DB::connection($this->tenancy->centralConnection()), $sourceTables, $tenant)
                     : $this->database->delete($tenant, $from);
+            } else {
+                // Kept for safety; the purge removes it with the tenant.
+                $data['previous_tiers'] = array_values(array_unique(array_merge((array) ($data['previous_tiers'] ?? []), [$from->value])));
             }
+
+            $tenant->forceFill(['isolation' => $to, 'data' => $data])->save();
 
             $wasDown || $this->maintenance->up($tenant);
             event(new TenantPromoted($tenant));

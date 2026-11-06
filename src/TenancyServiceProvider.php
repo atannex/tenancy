@@ -6,6 +6,7 @@ namespace Atannex\Tenancy;
 
 use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Contracts\Http\Kernel;
+use Illuminate\Routing\Middleware\SubstituteBindings;
 use Illuminate\Support\ServiceProvider;
 use Laravel\Octane\Events\RequestReceived;
 
@@ -120,6 +121,7 @@ final class TenancyServiceProvider extends ServiceProvider
         $router->aliasMiddleware('tenant.optional', Http\Middleware\InitializeTenancyIfPossible::class);
         $router->aliasMiddleware('tenant.active', Http\Middleware\EnsureTenantActive::class);
         $router->aliasMiddleware('central', Http\Middleware\EnsureCentral::class);
+        $router->aliasMiddleware('tenant.session', Http\Middleware\InitializeTenancyAfterSession::class);
 
         // Tenancy must be initialized before route model binding runs.
         $kernel = $this->app->make(Kernel::class);
@@ -127,6 +129,8 @@ final class TenancyServiceProvider extends ServiceProvider
         if (method_exists($kernel, 'prependToMiddlewarePriority')) {
             $kernel->prependToMiddlewarePriority(Http\Middleware\InitializeTenancy::class);
             $kernel->prependToMiddlewarePriority(Http\Middleware\InitializeTenancyIfPossible::class);
+            // After the session and auth, still before route model binding.
+            $kernel->addToMiddlewarePriorityBefore(SubstituteBindings::class, Http\Middleware\InitializeTenancyAfterSession::class);
         }
     }
 }

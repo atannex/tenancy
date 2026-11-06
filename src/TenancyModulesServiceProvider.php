@@ -15,6 +15,7 @@ use Atannex\Tenancy\Plans\Features;
 use Atannex\Tenancy\Plans\Quotas;
 use Illuminate\Contracts\Auth\Access\Gate;
 use Illuminate\Support\ServiceProvider;
+use Illuminate\Support\Str;
 
 /** Plans, features, quotas, metering, settings, people and the audit log. */
 final class TenancyModulesServiceProvider extends ServiceProvider
@@ -56,6 +57,11 @@ final class TenancyModulesServiceProvider extends ServiceProvider
 
         if (config('tenancy.people.gate', true) && $this->app->bound(Gate::class)) {
             $this->app->make(Gate::class)->before(function ($user, string $ability) {
+                // Only tenant abilities: a tenant owner must never pass central checks (Horizon, admin …).
+                if (! Str::is((array) config('tenancy.people.gate_abilities', []), $ability)) {
+                    return null;
+                }
+
                 if (! is_object($user) || ! method_exists($user, 'tenantRole') || ! ($role = $user->tenantRole())) {
                     return null;
                 }

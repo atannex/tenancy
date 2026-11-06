@@ -30,10 +30,17 @@ final class Purger
             $key = $tenant->getTenantKey();
             $slug = $tenant->getTenantSlug();
 
-            if ($tenant->isolationTier() === IsolationTier::Shared) {
-                $this->deleteSharedRows($tenant);
-            } elseif ($this->database->exists($tenant)) {
-                $this->database->delete($tenant);
+            // The current tier, and any tier a promotion left data on.
+            $tiers = array_unique(array_merge([$tenant->isolationTier()->value], (array) (((array) ($tenant->getAttribute('data') ?? []))['previous_tiers'] ?? [])));
+
+            foreach ($tiers as $tier) {
+                $tier = IsolationTier::from($tier);
+
+                if ($tier === IsolationTier::Shared) {
+                    $this->deleteSharedRows($tenant);
+                } elseif ($this->database->exists($tenant, $tier)) {
+                    $this->database->delete($tenant, $tier);
+                }
             }
 
             foreach ((array) config('tenancy.filesystem.disks', []) as $disk) {
@@ -42,8 +49,10 @@ final class Purger
                 }
             }
 
-            $store = app('cache')->store()->getStore();
-            (new PrefixedStore($store instanceof PrefixedStore ? $store->inner() : $store, $key))->flush();
+            foreach (array_unique((array) (config('tenancy.cache.stores') ?: [config('cache.default')])) as $name) {
+                $store = app('cache')->store($name)->getStore();
+                (new PrefixedStore($store instanceof PrefixedStore ? $store->inner() : $store, $key))->flush();
+            }
 
             $tenant->forceDelete();
             event(new TenantPurged($key, $slug));
@@ -53,8 +62,8 @@ final class Purger
     /** Repeated passes, so tables that reference each other without cascades still empty. */
     private function deleteSharedRows(Tenant $tenant): void
     {
-        $connection = $this->tables->connection($tenant);
-        $pending = $this->tables->for($tenant);
+        $connection = $this->tables->connection($tenant, IsolationTier::Shared);
+        $pending = $this->tables->for($tenant, IsolationTier::Shared);
 
         for ($pass = 0; $pending !== [] && $pass <= count($pending); $pass++) {
             foreach ($pending as $table => $column) {

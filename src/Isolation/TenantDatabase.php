@@ -84,24 +84,31 @@ final class TenantDatabase
         return $this->manager($tenant, $tier)->exists($this->name($tenant), $this->server($tenant));
     }
 
-    /** Create the tenant's database (idempotent) and, if enabled, its own login. */
-    public function create(Tenant $tenant, ?IsolationTier $tier = null): void
+    /** Create the tenant's database (idempotent) and, if enabled, its own login. True when it was created now. */
+    public function create(Tenant $tenant, ?IsolationTier $tier = null): bool
     {
         $manager = $this->manager($tenant, $tier);
         $name = $this->name($tenant);
         $overrides = ['database' => $name];
+        $created = false;
 
         if (! $manager->exists($name, $this->server($tenant))) {
+            $this->assertNotCentral($name);
             $manager->create($name, $this->server($tenant));
+            $created = true;
         }
 
         if (config('tenancy.database.dedicated_users') && $manager instanceof ManagesDatabaseUsers && empty($this->overrides($tenant)['username'])) {
-            $overrides['username'] = Str::limit($name, 32, '');
+            // A hash of the full key: ULIDs from one millisecond share all but their last character.
+            $prefix = (string) config('tenancy.database.user_prefix', 't_');
+            $overrides['username'] = $prefix.substr(hash('sha256', $tenant->getTenantKey()), 0, max(16, 32 - strlen($prefix)));
             $overrides['password'] = Str::password(32, symbols: false);
             $manager->createUser($name, $overrides['username'], $overrides['password'], $this->server($tenant));
         }
 
         $this->remember($tenant, $overrides);
+
+        return $created;
     }
 
     public function delete(Tenant $tenant, ?IsolationTier $tier = null): void
@@ -110,11 +117,32 @@ final class TenantDatabase
         $overrides = $this->overrides($tenant);
         $server = array_merge($this->template(), array_intersect_key($overrides, array_flip(['host', 'port', 'unix_socket', 'sslmode'])));
 
+        $this->assertNotCentral($this->name($tenant));
         DB::purge($this->connectionName());
         $manager->delete($this->name($tenant), $server);
 
         if (config('tenancy.database.dedicated_users') && $manager instanceof ManagesDatabaseUsers && ! empty($overrides['username'])) {
             $manager->deleteUser((string) $overrides['username'], $server);
+
+            // The login is gone; a later create() must make a new one.
+            if ($tenant instanceof Model) {
+                $tenant->forceFill(['connection' => array_diff_key($overrides, array_flip(['username', 'password']))])->saveQuietly();
+            }
+        }
+    }
+
+    /** Never create or drop the database the central or template connection uses. */
+    private function assertNotCentral(string $name): void
+    {
+        $protected = array_filter([
+            config('database.connections.'.app(Tenancy::class)->centralConnection().'.database'),
+            $this->template()['database'] ?? null,
+        ]);
+
+        foreach ($protected as $database) {
+            if ($name === $database || basename((string) $database, '.sqlite') === $name) {
+                throw new InvalidArgumentException("Refusing to touch [{$name}]: it is the central database.");
+            }
         }
     }
 
