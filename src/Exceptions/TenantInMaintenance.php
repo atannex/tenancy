@@ -18,6 +18,12 @@ final class TenantInMaintenance extends TenancyException
         return $e;
     }
 
+    /** The operator's own message (tenants:down --message) is meant for visitors. */
+    public function publicMessage(): string
+    {
+        return $this->getMessage();
+    }
+
     public function getStatusCode(): int
     {
         return 503;

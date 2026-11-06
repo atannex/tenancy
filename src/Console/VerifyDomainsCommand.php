@@ -17,6 +17,10 @@ final class VerifyDomainsCommand extends Command
 
     public function handle(Domains $domains): int
     {
+        if (! $this->argument('host') && ($expired = $domains->expireClaims()) > 0) {
+            $this->components->info("Dropped {$expired} unverified claim(s) past tenancy.domains.claim_ttl_days.");
+        }
+
         $query = Domain::query()->whereNull('verified_at');
         $this->argument('host') && $query->where('host', Hosts::normalize((string) $this->argument('host')));
         $pending = 0;

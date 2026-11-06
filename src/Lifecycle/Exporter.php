@@ -85,13 +85,25 @@ final class Exporter
             'format' => self::FORMAT,
             'version' => 1,
             'exported_at' => now()->toIso8601String(),
-            'tenant' => array_diff_key($tenant->attributesToArray(), array_flip(['connection'])),
+            'tenant' => $this->tenantAttributes($tenant),
             'domains' => method_exists($tenant, 'domains') ? $tenant->domains()->get(['host', 'type'])->toArray() : [],
         ] + $manifest, JSON_PRETTY_PRINT | JSON_THROW_ON_ERROR));
 
         $zip->close();
 
         return $path;
+    }
+
+    /** Everything but credentials and operational secrets. @return array<string, mixed> */
+    private function tenantAttributes(Tenant&Model $tenant): array
+    {
+        $attributes = array_diff_key($tenant->attributesToArray(), array_flip(['connection']));
+
+        if (is_array($attributes['data'] ?? null)) {
+            unset($attributes['data']['maintenance'], $attributes['data']['provisioning'], $attributes['data']['tenancy_created_database']);
+        }
+
+        return $attributes;
     }
 
     private function firstColumn(Connection $connection, string $table): string

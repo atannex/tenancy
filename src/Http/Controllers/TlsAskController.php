@@ -28,7 +28,9 @@ final class TlsAskController
         $known = Domain::query()->where('host', $host)->whereNotNull('verified_at')
             ->whereHas('tenant', fn ($q) => $q->where('status', TenantStatus::Active->value))->exists();
 
-        foreach ((array) config('tenancy.identification.central_domains', []) as $central) {
+        // Subdomains are usually covered by a wildcard certificate; answering for them
+        // would also let anyone confirm which tenant slugs exist.
+        foreach (config('tenancy.domains.tls_ask.subdomains', false) ? (array) config('tenancy.identification.central_domains', []) : [] as $central) {
             $central = Hosts::normalize($central);
             $slug = str_ends_with($host, '.'.$central) ? substr($host, 0, -strlen('.'.$central)) : '';
 

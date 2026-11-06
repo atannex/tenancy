@@ -171,6 +171,8 @@ return [
     'domains' => [
         'record' => '_atannex-tenancy',
         'auto_verify' => true,
+        // Unverified claims expire, so nobody can hold a host they cannot prove.
+        'claim_ttl_days' => 7,
         'verify_delays' => [60, 300, 900, 3600, 21600, 86400],
         'redirect_aliases' => true,
         'dns_resolver' => PhpDnsResolver::class,
@@ -179,6 +181,9 @@ return [
         'tls_ask' => [
             'enabled' => false,
             'path' => 'tenancy/tls/ask',
+            // Also answer for {slug}.{central domain} (reveals which slugs exist; off when you use a wildcard certificate).
+            'subdomains' => false,
+            'middleware' => ['throttle:120,1'],
         ],
     ],
 

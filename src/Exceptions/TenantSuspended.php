@@ -13,6 +13,11 @@ final class TenantSuspended extends TenancyException
         return new self("Tenant [{$tenant->getTenantSlug()}] is suspended.");
     }
 
+    public function publicMessage(): string
+    {
+        return 'This workspace is suspended.';
+    }
+
     public function getStatusCode(): int
     {
         return 423;

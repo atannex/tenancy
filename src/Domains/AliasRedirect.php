@@ -19,7 +19,7 @@ final class AliasRedirect
     public static function target(string $host): ?string
     {
         $target = app(ResolverCache::class)->remember(self::key($host), function () use ($host): string {
-            $domain = Domain::query()->where('host', $host)->first();
+            $domain = Domain::query()->where('host', $host)->whereNotNull('verified_at')->first();
 
             if ($domain === null || $domain->type !== DomainType::Alias) {
                 return '';

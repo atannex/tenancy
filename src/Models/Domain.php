@@ -51,6 +51,10 @@ class Domain extends Model
                     throw new InvalidArgumentException("Domain [{$domain->host}] is on the central domain [{$central}]; tenant subdomains come from the slug.");
                 }
             }
+
+            if (static::verifiedElsewhere($domain->host, $domain->getKey())) {
+                throw new InvalidArgumentException("Domain [{$domain->host}] is already verified by another tenant.");
+            }
         });
 
         // Forget after commit, so a concurrent request cannot re-cache the old owner.
@@ -84,6 +88,13 @@ class Domain extends Model
     public function tenant(): BelongsTo
     {
         return $this->belongsTo(config('tenancy.models.tenant'), 'tenant_id');
+    }
+
+    /** Is $host verified by any domain row other than $except? */
+    public static function verifiedElsewhere(string $host, mixed $except = null): bool
+    {
+        return static::query()->where('host', Hosts::normalize($host))->whereNotNull('verified_at')
+            ->when($except !== null, fn ($q) => $q->whereKeyNot($except))->exists();
     }
 
     public function isVerified(): bool

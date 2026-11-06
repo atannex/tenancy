@@ -84,6 +84,7 @@ it('moves the primary domain', function () {
 
 it('answers the on-demand TLS ask endpoint', function () {
     $this->refreshApplicationWithTlsAsk();
+    config(['tenancy.domains.tls_ask.subdomains' => true]);
     $tenant = Tenant::factory()->withDomain('tls.test')->create(['slug' => 'tls']);
     Domain::create(['tenant_id' => $tenant->id, 'host' => 'pending.test']);
 

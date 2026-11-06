@@ -24,7 +24,10 @@ final class DomainsController
     public function store(Request $request, string $tenant): JsonResponse
     {
         $data = $request->validate([
-            'host' => ['required', 'string', 'max:253', Rule::unique(Domain::class, 'host')],
+            'host' => ['required', 'string', 'max:253',
+                Rule::unique(Domain::class, 'host')->whereNotNull('verified_at'),
+                Rule::unique(Domain::class, 'host')->where('tenant_id', $this->tenancy->findOrFail($tenant)->getTenantKey()),
+            ],
             'type' => ['nullable', Rule::enum(DomainType::class)],
         ]);
 

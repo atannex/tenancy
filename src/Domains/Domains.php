@@ -39,6 +39,7 @@ final class Domains
         event(new DomainAdded($tenant, $domain));
 
         if ($verified) {
+            $this->dropRivalClaims($domain);
             $this->issue($tenant, $domain);
         } elseif (config('tenancy.domains.auto_verify', true)) {
             VerifyDomain::dispatch($domain->getKey());
@@ -93,10 +94,26 @@ final class Domains
         }
 
         $domain->update(['verified_at' => now()]);
+        $this->dropRivalClaims($domain);
         event(new DomainVerified($tenant, $domain));
         $this->issue($tenant, $domain);
 
         return true;
+    }
+
+    /** The verified owner wins: other tenants' unverified claims on the host go. */
+    private function dropRivalClaims(Domain $domain): void
+    {
+        Domain::query()->where('host', $domain->host)->whereKeyNot($domain->getKey())->whereNull('verified_at')->get()->each->delete();
+    }
+
+    /** Unverified claims older than tenancy.domains.claim_ttl_days. */
+    public function expireClaims(): int
+    {
+        $stale = Domain::query()->whereNull('verified_at')->where('created_at', '<', now()->subDays((int) config('tenancy.domains.claim_ttl_days', 7)))->get();
+        $stale->each->delete();
+
+        return $stale->count();
     }
 
     private function issue(Tenant $tenant, Domain $domain): void

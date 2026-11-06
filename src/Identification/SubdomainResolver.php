@@ -18,7 +18,11 @@ final class SubdomainResolver implements TenantResolver
     {
         $host = Hosts::normalize($request->getHost());
 
-        foreach ((array) config('tenancy.identification.central_domains', []) as $central) {
+        // Longest first, so x.app.example.com matches app.example.com before example.com.
+        $centrals = (array) config('tenancy.identification.central_domains', []);
+        usort($centrals, fn ($a, $b) => strlen($b) <=> strlen($a));
+
+        foreach ($centrals as $central) {
             $suffix = '.'.Hosts::normalize($central);
 
             if (! str_ends_with($host, $suffix)) {
@@ -28,7 +32,7 @@ final class SubdomainResolver implements TenantResolver
             $slug = substr($host, 0, -strlen($suffix));
 
             if ($slug === '' || str_contains($slug, '.')) {
-                return null;
+                continue;
             }
 
             $key = ResolverCache::slugKey($slug);

@@ -29,3 +29,14 @@
   - the JSON management API;
   - `TenantRateLimit`;
   - `tenancy:doctor` and `tenancy:audit`.
+- **Hardening:**
+  - Dedicated tenants get their own connection name, so a model loaded in one tenant always saves to that tenant's database.
+  - `#[Central]` is honoured on queued listeners, notifications, mail and broadcasts.
+  - Membership changes run under a tenant row lock, so last-owner and seat checks can't race.
+  - The maintenance bypass is keyed by the app key, and exports leave out maintenance and provisioning data.
+  - The TLS ask endpoint answers only verified domains by default (`tls_ask.subdomains` opts in) and is throttled.
+  - Several tenants may claim a host until one verifies it; rival claims are then dropped, and stale claims expire.
+  - Queued tenant-database commands refuse to run once the tenant has moved to the shared tier.
+  - Nested central domains resolve.
+  - JSON errors outside debug mode show public messages only.
+  - The audit checks each model's own tenant column and connection, works with table prefixes, and uses a tokenizer-based model finder.

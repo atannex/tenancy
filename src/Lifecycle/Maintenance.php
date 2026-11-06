@@ -65,7 +65,8 @@ final class Maintenance
         $secret = $state['secret'] ?? null;
 
         if ($secret !== null) {
-            $proof = hash_hmac('sha256', $tenant->getTenantKey(), $secret);
+            // Keyed by the app key too, so the stored hash alone (e.g. in an export) cannot forge it.
+            $proof = hash_hmac('sha256', $tenant->getTenantKey().'|'.$secret, (string) config('app.key'));
 
             if (hash_equals($proof, (string) $request->cookies->get($cookie))) {
                 return null;

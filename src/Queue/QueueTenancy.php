@@ -9,6 +9,10 @@ use Atannex\Tenancy\Exceptions\TenantNotFound;
 use Atannex\Tenancy\Http\AccessGuard;
 use Atannex\Tenancy\Lifecycle\Maintenance;
 use Atannex\Tenancy\Tenancy;
+use Illuminate\Broadcasting\BroadcastEvent;
+use Illuminate\Events\CallQueuedListener;
+use Illuminate\Mail\SendQueuedMailable;
+use Illuminate\Notifications\SendQueuedNotifications;
 use Illuminate\Queue\Events\JobExceptionOccurred;
 use Illuminate\Queue\Events\JobFailed;
 use Illuminate\Queue\Events\JobProcessed;
@@ -45,15 +49,37 @@ final class QueueTenancy
     public function payload(array $payload): array
     {
         $tenant = $this->tenancy->current();
-        // At hook time commandName may still hold the job object itself.
-        $class = $payload['data']['commandName'] ?? null;
-        $class = is_object($class) ? $class::class : $class;
-
-        if ($tenant === null || (is_string($class) && class_exists($class) && (new ReflectionClass($class))->getAttributes(Central::class) !== [])) {
+        if ($tenant === null || $this->isCentral($payload)) {
             return [];
         }
 
         return [self::PAYLOAD_KEY => $tenant->getTenantKey()];
+    }
+
+    /** #[Central] on the job, or on what a wrapper job carries (queued listener, notification, mailable, broadcast). */
+    private function isCentral(array $payload): bool
+    {
+        // At hook time commandName may still hold the job object itself.
+        $command = $payload['data']['command'] ?? $payload['data']['commandName'] ?? null;
+        $classes = [is_object($command) ? $command::class : $command];
+
+        if (is_object($command)) {
+            $classes[] = match (true) {
+                $command instanceof CallQueuedListener => $command->class,
+                $command instanceof SendQueuedNotifications => $command->notification::class,
+                $command instanceof SendQueuedMailable => $command->mailable::class,
+                $command instanceof BroadcastEvent => $command->event::class,
+                default => null,
+            };
+        }
+
+        foreach (array_filter($classes, 'is_string') as $class) {
+            if (class_exists($class) && (new ReflectionClass($class))->getAttributes(Central::class) !== []) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private function processing(JobProcessing $event): void

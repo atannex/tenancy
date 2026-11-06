@@ -15,8 +15,10 @@ use Atannex\Tenancy\Exceptions\LastOwner;
 use Atannex\Tenancy\Exceptions\NotAMember;
 use Atannex\Tenancy\Models\Membership;
 use Atannex\Tenancy\Plans\Quotas;
+use Atannex\Tenancy\Tenancy;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\DB;
 
 final class Members
 {
@@ -26,6 +28,11 @@ final class Members
 
     /** Add (or reactivate) a member. Takes a seat when the tenant has a seat quota. */
     public function add(Tenant $tenant, Model $user, ?string $role = null, ?Model $invitedBy = null): Membership
+    {
+        return $this->locked($tenant, fn () => $this->addLocked($tenant, $user, $role, $invitedBy));
+    }
+
+    private function addLocked(Tenant $tenant, Model $user, ?string $role = null, ?Model $invitedBy = null): Membership
     {
         $role ??= (string) config('tenancy.people.default_role', 'member');
         $this->roles->assertExists($role);
@@ -57,6 +64,11 @@ final class Members
 
     public function remove(Tenant $tenant, Model $user): void
     {
+        $this->locked($tenant, fn () => $this->removeLocked($tenant, $user));
+    }
+
+    private function removeLocked(Tenant $tenant, Model $user): void
+    {
         $membership = $this->findOrFail($tenant, $user);
         $this->guardLastOwner($membership);
 
@@ -65,6 +77,11 @@ final class Members
     }
 
     public function changeRole(Tenant $tenant, Model $user, string $role): Membership
+    {
+        return $this->locked($tenant, fn () => $this->changeRoleLocked($tenant, $user, $role));
+    }
+
+    private function changeRoleLocked(Tenant $tenant, Model $user, string $role): Membership
     {
         $this->roles->assertExists($role);
         $membership = $this->findOrFail($tenant, $user);
@@ -86,6 +103,11 @@ final class Members
 
     public function suspend(Tenant $tenant, Model $user): Membership
     {
+        return $this->locked($tenant, fn () => $this->suspendLocked($tenant, $user));
+    }
+
+    private function suspendLocked(Tenant $tenant, Model $user): Membership
+    {
         $membership = $this->findOrFail($tenant, $user);
         $this->guardLastOwner($membership);
 
@@ -97,6 +119,11 @@ final class Members
 
     public function reactivate(Tenant $tenant, Model $user): Membership
     {
+        return $this->locked($tenant, fn () => $this->reactivateLocked($tenant, $user));
+    }
+
+    private function reactivateLocked(Tenant $tenant, Model $user): Membership
+    {
         $membership = $this->findOrFail($tenant, $user);
 
         if (! $membership->isActive()) {
@@ -106,6 +133,20 @@ final class Members
         }
 
         return $membership;
+    }
+
+    /**
+     * Owner and seat checks must not race: hold a row lock on the tenant while
+     * checking and writing, so two requests cannot both remove the last owner
+     * or both take the last seat.
+     */
+    private function locked(Tenant $tenant, \Closure $callback): mixed
+    {
+        return DB::connection(app(Tenancy::class)->centralConnection())->transaction(function () use ($tenant, $callback) {
+            app(Tenancy::class)->query()->whereKey($tenant->getTenantKey())->lockForUpdate()->first();
+
+            return $callback();
+        });
     }
 
     public function find(Tenant $tenant, Model $user): ?Membership

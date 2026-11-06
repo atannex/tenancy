@@ -4,7 +4,10 @@ declare(strict_types=1);
 
 namespace Atannex\Tenancy\Exceptions;
 
+use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 use RuntimeException;
+use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
 
 /**
@@ -22,6 +25,22 @@ abstract class TenancyException extends RuntimeException implements HttpExceptio
     public function getHeaders(): array
     {
         return [];
+    }
+
+    /** What clients see outside debug mode: no class names, slugs or keys. */
+    public function publicMessage(): string
+    {
+        return Response::$statusTexts[$this->getStatusCode()] ?? 'Error';
+    }
+
+    /** JSON errors outside debug mode carry only the public message; HTML uses your error views. */
+    public function render(Request $request): ?Response
+    {
+        if (config('app.debug') || ! $request->expectsJson()) {
+            return null;
+        }
+
+        return new JsonResponse(['message' => $this->publicMessage()], $this->getStatusCode(), $this->getHeaders());
     }
 
     /** Returning true tells Laravel the exception is handled (not logged). */

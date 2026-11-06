@@ -58,7 +58,7 @@ it('switches the default connection and restores it', function () {
     $this->db->create($this->a);
     $central = DB::getDefaultConnection();
 
-    expect(Tenancy::run($this->a, fn () => DB::getDefaultConnection()))->toBe('tenant')
+    expect(Tenancy::run($this->a, fn () => DB::getDefaultConnection()))->toBe('tenant_'.strtolower($this->a->id))
         ->and(Tenancy::run($this->a, fn () => Tenant::count()))->toBe(3)
         ->and(DB::getDefaultConnection())->toBe($central)
         ->and(Tenancy::run($this->s, fn () => DB::getDefaultConnection()))->toBe($central);

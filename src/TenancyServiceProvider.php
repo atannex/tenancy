@@ -65,7 +65,8 @@ final class TenancyServiceProvider extends ServiceProvider
         }
 
         if ($config->get('tenancy.domains.tls_ask.enabled')) {
-            $this->app['router']->get($config->get('tenancy.domains.tls_ask.path'), Http\Controllers\TlsAskController::class)->name('tenancy.tls.ask');
+            $this->app['router']->get($config->get('tenancy.domains.tls_ask.path'), Http\Controllers\TlsAskController::class)
+                ->middleware((array) $config->get('tenancy.domains.tls_ask.middleware', []))->name('tenancy.tls.ask');
         }
 
         if ($config->get('tenancy.lifecycle.schedule', true)) {
