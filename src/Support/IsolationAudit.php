@@ -33,7 +33,7 @@ final class IsolationAudit
         $problems = [];
 
         foreach ($schema->getTableListing(schemaQualified: false) as $table) {
-            if (in_array($table, $ignored, true) || ! $schema->hasColumn($table, $column)) {
+            if (in_array($table, $ignored, true) || in_array($table, PackageTables::NAMES, true) || ! $schema->hasColumn($table, $column)) {
                 continue;
             }
 

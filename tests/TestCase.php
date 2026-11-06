@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Atannex\Tenancy\Tests;
 
 use Atannex\Tenancy\Facades\Tenancy;
+use Atannex\Tenancy\TenancyModulesServiceProvider;
 use Atannex\Tenancy\TenancyServiceProvider;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Orchestra\Testbench\TestCase as Orchestra;
@@ -15,7 +16,7 @@ abstract class TestCase extends Orchestra
 
     protected function getPackageProviders($app): array
     {
-        return [TenancyServiceProvider::class];
+        return [TenancyServiceProvider::class, TenancyModulesServiceProvider::class];
     }
 
     protected function getPackageAliases($app): array
@@ -41,6 +42,7 @@ abstract class TestCase extends Orchestra
         $app['config']->set('tenancy.database.sqlite_path', sys_get_temp_dir().'/atannex-tenancy-tests/'.getmypid());
         $app['config']->set('queue.connections.database', ['driver' => 'database', 'connection' => 'testing', 'table' => 'jobs', 'queue' => 'default', 'retry_after' => 90]);
         $app['config']->set('queue.failed', ['driver' => 'database-uuids', 'database' => 'testing', 'table' => 'failed_jobs']);
+        $app['config']->set('auth.providers.users.model', Fixtures\Models\User::class);
     }
 
     protected function defineDatabaseMigrations(): void

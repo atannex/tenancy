@@ -11,6 +11,7 @@ use Atannex\Tenancy\Enums\DomainType;
 use Atannex\Tenancy\Enums\IsolationTier;
 use Atannex\Tenancy\Enums\TenantStatus;
 use Atannex\Tenancy\Identification\ResolverCache;
+use Atannex\Tenancy\Plans\InteractsWithPlans;
 use Atannex\Tenancy\Tenancy;
 use Closure;
 use Illuminate\Database\Eloquent\Casts\AsArrayObject;
@@ -35,7 +36,7 @@ use InvalidArgumentException;
 class Tenant extends Model implements TenantContract
 {
     /** @use HasFactory<TenantFactory> */
-    use HasFactory, HasUlids, OnCentralConnection, SoftDeletes;
+    use HasFactory, HasUlids, InteractsWithPlans, OnCentralConnection, SoftDeletes;
 
     /** One DNS label: lowercase letters, digits and inner hyphens, 1–63 chars. */
     public const string SLUG_PATTERN = '/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/';
