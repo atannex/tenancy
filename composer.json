@@ -1,0 +1,45 @@
+{
+    "name": "atannex/tenancy",
+    "description": "Enterprise multi-tenancy for Laravel: tenant identification by domain, subdomain, path or header, a fail-closed shared-database tier, schema and database-per-tenant tiers, tenant-aware infrastructure, lifecycle, plans, members and audit.",
+    "keywords": ["laravel", "tenancy", "multi-tenant", "saas", "multitenancy"],
+    "type": "library",
+    "license": "MIT",
+    "authors": [{"name": "Atanga Leke Collins", "email": "atangageihlekecollins@gmail.com"}],
+    "require": {
+        "php": "^8.3",
+        "illuminate/cache": "^12.0|^13.0",
+        "illuminate/console": "^12.0|^13.0",
+        "illuminate/contracts": "^12.0|^13.0",
+        "illuminate/database": "^12.0|^13.0",
+        "illuminate/events": "^12.0|^13.0",
+        "illuminate/filesystem": "^12.0|^13.0",
+        "illuminate/http": "^12.0|^13.0",
+        "illuminate/routing": "^12.0|^13.0",
+        "illuminate/support": "^12.0|^13.0",
+        "illuminate/validation": "^12.0|^13.0"
+    },
+    "require-dev": {
+        "laravel/pint": "^1.18",
+        "orchestra/testbench": "^10.0|^11.0",
+        "pestphp/pest": "^3.7|^4.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "Atannex\\Tenancy\\": "src/",
+            "Atannex\\Tenancy\\Database\\Factories\\": "database/factories/"
+        },
+        "files": ["src/helpers.php"]
+    },
+    "autoload-dev": {"psr-4": {"Atannex\\Tenancy\\Tests\\": "tests/"}},
+    "extra": {
+        "laravel": {
+            "providers": ["Atannex\\Tenancy\\TenancyServiceProvider"],
+            "aliases": {"Tenancy": "Atannex\\Tenancy\\Facades\\Tenancy"}
+        },
+        "branch-alias": {"dev-main": "1.x-dev"}
+    },
+    "scripts": {"test": "pest"},
+    "config": {"sort-packages": true, "allow-plugins": {"pestphp/pest-plugin": true}},
+    "minimum-stability": "stable",
+    "prefer-stable": true
+}
