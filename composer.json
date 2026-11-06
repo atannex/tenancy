@@ -33,7 +33,7 @@
     "autoload-dev": {"psr-4": {"Atannex\\Tenancy\\Tests\\": "tests/"}},
     "extra": {
         "laravel": {
-            "providers": ["Atannex\\Tenancy\\TenancyServiceProvider"],
+            "providers": ["Atannex\\Tenancy\\TenancyServiceProvider", "Atannex\\Tenancy\\TenancyModulesServiceProvider"],
             "aliases": {"Tenancy": "Atannex\\Tenancy\\Facades\\Tenancy"}
         },
         "branch-alias": {"dev-main": "1.x-dev"}
