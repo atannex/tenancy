@@ -6,6 +6,8 @@ use Atannex\Tenancy\Bootstrappers\CacheBootstrapper;
 use Atannex\Tenancy\Bootstrappers\DatabaseBootstrapper;
 use Atannex\Tenancy\Bootstrappers\FilesystemBootstrapper;
 use Atannex\Tenancy\Bootstrappers\LogBootstrapper;
+use Atannex\Tenancy\Domains\NullCertificateIssuer;
+use Atannex\Tenancy\Domains\PhpDnsResolver;
 use Atannex\Tenancy\Identification\DomainResolver;
 use Atannex\Tenancy\Identification\HeaderResolver;
 use Atannex\Tenancy\Identification\PathResolver;
@@ -14,8 +16,13 @@ use Atannex\Tenancy\Isolation\Managers\MySqlDatabaseManager;
 use Atannex\Tenancy\Isolation\Managers\PostgresDatabaseManager;
 use Atannex\Tenancy\Isolation\Managers\SqliteDatabaseManager;
 use Atannex\Tenancy\Isolation\Managers\SqlServerDatabaseManager;
+use Atannex\Tenancy\Lifecycle\Steps\CreateDatabase;
+use Atannex\Tenancy\Lifecycle\Steps\CreatePrimaryDomain;
+use Atannex\Tenancy\Lifecycle\Steps\MigrateDatabase;
+use Atannex\Tenancy\Lifecycle\Steps\SeedDatabase;
 use Atannex\Tenancy\Models\Domain;
 use Atannex\Tenancy\Models\Tenant;
+use Atannex\Tenancy\People\Provisioning\CreateOwnerMembership;
 
 return [
 
@@ -133,6 +140,46 @@ return [
 
     // End tenancy after each request (and each Octane request) so no state leaks.
     'reset_between_requests' => true,
+
+    'provisioning' => [
+        // Run provisioning on the queue (ProvisionTenant job) instead of inline.
+        'queue' => false,
+        'tries' => 3,
+        'backoff_ms' => 500,
+        // On final failure undo finished steps (retry starts over). Off: retry resumes at the failed step.
+        'rollback_on_failure' => true,
+        'seeder' => null,
+        'steps' => [
+            CreateDatabase::class,
+            MigrateDatabase::class,
+            SeedDatabase::class,
+            CreatePrimaryDomain::class,
+            CreateOwnerMembership::class,
+        ],
+    ],
+
+    'lifecycle' => [
+        // Days between archiving and purging.
+        'grace_days' => 30,
+        // Schedule tenants:purge --due daily and tenants:domains:verify hourly.
+        'schedule' => true,
+        // Where the shared tier's tenant models live (null = tenancy.audit.paths).
+        'model_paths' => null,
+    ],
+
+    'domains' => [
+        'record' => '_atannex-tenancy',
+        'auto_verify' => true,
+        'verify_delays' => [60, 300, 900, 3600, 21600, 86400],
+        'redirect_aliases' => true,
+        'dns_resolver' => PhpDnsResolver::class,
+        'certificate_issuer' => NullCertificateIssuer::class,
+        // On-demand TLS ask endpoint (GET {path}?domain=host).
+        'tls_ask' => [
+            'enabled' => false,
+            'path' => 'tenancy/tls/ask',
+        ],
+    ],
 
     'migrations' => [
         // Tenant migrations. Shared-tier tenants get them once on the central database.

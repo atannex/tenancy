@@ -22,6 +22,9 @@ final class TenancyServiceProvider extends ServiceProvider
         $this->app->singleton(Identification\PathDefaults::class);
         $this->app->singleton(Queue\QueueTenancy::class);
         $this->app->singleton(Isolation\TenantDatabase::class);
+        $this->app->singleton(Testing\TenancyFake::class);
+        $this->app->bind(Contracts\DnsResolver::class, fn () => $this->app->make(config('tenancy.domains.dns_resolver')));
+        $this->app->bind(Contracts\CertificateIssuer::class, fn () => $this->app->make(config('tenancy.domains.certificate_issuer')));
     }
 
     public function boot(): void
@@ -56,6 +59,17 @@ final class TenancyServiceProvider extends ServiceProvider
             return $this->command('tenants:run', array_filter([$command, '--queue' => $queue]));
         });
 
+        if ($config->get('tenancy.domains.tls_ask.enabled')) {
+            $this->app['router']->get($config->get('tenancy.domains.tls_ask.path'), Http\Controllers\TlsAskController::class)->name('tenancy.tls.ask');
+        }
+
+        if ($config->get('tenancy.lifecycle.schedule', true)) {
+            $this->callAfterResolving(Schedule::class, function (Schedule $schedule): void {
+                $schedule->command('tenants:purge --due')->daily()->name('tenancy:purge-due');
+                $schedule->command('tenants:domains:verify')->hourly()->name('tenancy:verify-domains');
+            });
+        }
+
         if ($config->get('tenancy.reset_between_requests', true)) {
             $reset = fn () => $this->app->make(Tenancy::class)->reset();
 
@@ -79,6 +93,17 @@ final class TenancyServiceProvider extends ServiceProvider
                 Console\FreshCommand::class,
                 Console\SeedCommand::class,
                 Console\StatusCommand::class,
+                Console\SuspendCommand::class,
+                Console\ReactivateCommand::class,
+                Console\ArchiveCommand::class,
+                Console\RestoreCommand::class,
+                Console\PurgeCommand::class,
+                Console\RetryCommand::class,
+                Console\DownCommand::class,
+                Console\UpCommand::class,
+                Console\ExportCommand::class,
+                Console\ImportCommand::class,
+                Console\VerifyDomainsCommand::class,
             ]);
         }
     }

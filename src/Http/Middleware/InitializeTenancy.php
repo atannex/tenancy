@@ -4,12 +4,15 @@ declare(strict_types=1);
 
 namespace Atannex\Tenancy\Http\Middleware;
 
+use Atannex\Tenancy\Domains\AliasRedirect;
 use Atannex\Tenancy\Exceptions\TenantNotFound;
 use Atannex\Tenancy\Http\AccessGuard;
 use Atannex\Tenancy\Identification\ResolverPipeline;
+use Atannex\Tenancy\Lifecycle\Maintenance;
 use Atannex\Tenancy\Tenancy;
 use Closure;
 use Illuminate\Http\Request;
+use Symfony\Component\HttpFoundation\RedirectResponse;
 use Symfony\Component\HttpFoundation\Response;
 
 /** `tenant` / `tenant:domain,header` — the request must belong to a tenant. */
@@ -40,6 +43,16 @@ class InitializeTenancy
 
         if (config('tenancy.identification.require_active', true)) {
             AccessGuard::assertAccessible($tenant);
+        }
+
+        if ($host = $request->attributes->get('tenancy.host')) {
+            if (config('tenancy.domains.redirect_aliases', true) && $target = AliasRedirect::target($host)) {
+                return new RedirectResponse(str_replace('://'.$request->getHttpHost(), '://'.$target, $request->fullUrl()), 301);
+            }
+        }
+
+        if ($bypass = app(Maintenance::class)->check($request, $tenant)) {
+            return $bypass;
         }
 
         $this->tenancy->initialize($tenant);

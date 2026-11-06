@@ -8,7 +8,7 @@ namespace Atannex\Tenancy\Support;
 final class PackageTables
 {
     public const array NAMES = [
-        'tenants', 'tenant_domains',
+        'tenants', 'tenant_domains', 'tenant_provisioning_steps',
         'tenant_feature_overrides', 'tenant_usage', 'tenant_settings',
         'tenant_memberships', 'tenant_invitations', 'tenant_impersonations', 'tenant_audit_events',
     ];

@@ -30,6 +30,12 @@ final class DomainResolver implements TenantResolver
             return $value === null ? null : (string) $value;
         });
 
-        return LookupResult::tenant($this->tenancy, $this->cache, $key, $id);
+        $tenant = LookupResult::tenant($this->tenancy, $this->cache, $key, $id);
+
+        if ($tenant !== null) {
+            $request->attributes->set('tenancy.host', $host);
+        }
+
+        return $tenant;
     }
 }

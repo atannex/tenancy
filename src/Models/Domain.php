@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Atannex\Tenancy\Models;
 
 use Atannex\Tenancy\Database\OnCentralConnection;
+use Atannex\Tenancy\Domains\AliasRedirect;
 use Atannex\Tenancy\Enums\DomainType;
 use Atannex\Tenancy\Identification\Hosts;
 use Atannex\Tenancy\Identification\ResolverCache;
@@ -55,10 +56,18 @@ class Domain extends Model
         // Forget after commit, so a concurrent request cannot re-cache the old owner.
         $forget = function (self $domain): void {
             $hosts = array_filter([$domain->host, $domain->isDirty('host') ? $domain->getOriginal('host') : null]);
+            // Alias targets depend on every domain of the tenant (old and new owner).
+            $siblings = static::query()->whereIn('tenant_id', array_filter([$domain->tenant_id, $domain->getOriginal('tenant_id')]))->pluck('host')->all();
 
-            $domain->getConnection()->afterCommit(function () use ($hosts): void {
+            $domain->getConnection()->afterCommit(function () use ($hosts, $siblings): void {
+                $cache = app(ResolverCache::class);
+
                 foreach ($hosts as $host) {
-                    app(ResolverCache::class)->forget(ResolverCache::domainKey($host));
+                    $cache->forget(ResolverCache::domainKey($host));
+                }
+
+                foreach (array_unique(array_merge($hosts, $siblings)) as $host) {
+                    $cache->forget(AliasRedirect::key($host));
                 }
             });
         };

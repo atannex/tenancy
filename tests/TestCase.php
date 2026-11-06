@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Atannex\Tenancy\Tests;
 
 use Atannex\Tenancy\Facades\Tenancy;
+use Atannex\Tenancy\Http\Controllers\TlsAskController;
 use Atannex\Tenancy\TenancyModulesServiceProvider;
 use Atannex\Tenancy\TenancyServiceProvider;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -43,6 +44,14 @@ abstract class TestCase extends Orchestra
         $app['config']->set('queue.connections.database', ['driver' => 'database', 'connection' => 'testing', 'table' => 'jobs', 'queue' => 'default', 'retry_after' => 90]);
         $app['config']->set('queue.failed', ['driver' => 'database-uuids', 'database' => 'testing', 'table' => 'failed_jobs']);
         $app['config']->set('auth.providers.users.model', Fixtures\Models\User::class);
+    }
+
+    /** Boot again with the TLS ask route registered (routes register at boot). */
+    protected function refreshApplicationWithTlsAsk(): void
+    {
+        $this->afterApplicationCreated(fn () => null);
+        config(['tenancy.domains.tls_ask.enabled' => true]);
+        $this->app['router']->get(config('tenancy.domains.tls_ask.path'), TlsAskController::class);
     }
 
     protected function defineDatabaseMigrations(): void

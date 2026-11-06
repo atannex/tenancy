@@ -135,6 +135,26 @@ final class Tenancy
         return $count;
     }
 
+    /**
+     * Create and provision a tenant (queued when tenancy.provisioning.queue is on).
+     *
+     * @param  array<string, mixed>  $attributes  name, slug, isolation, plan, data …
+     * @param  array<string, mixed>  $options  domain, verified, owner, seeder, and your own step options
+     */
+    public function create(array $attributes, array $options = []): Tenant&Model
+    {
+        return app(Lifecycle\Provisioner::class)->create($attributes, $options);
+    }
+
+    /** Swap provisioning for a fake that activates tenants at once and records them. */
+    public function fake(): Testing\TenancyFake
+    {
+        $fake = app(Testing\TenancyFake::class);
+        app()->instance(Lifecycle\Provisioner::class, $fake);
+
+        return $fake;
+    }
+
     /** End every frame and revert every bootstrapper. */
     public function reset(): void
     {
