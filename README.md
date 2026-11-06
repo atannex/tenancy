@@ -15,4 +15,4 @@ Add `BelongsToTenant` to every tenant-owned model, `$table->tenant()` to its mig
 - **Custom domains:** DNS verification, alias redirects, a TLS hook.
 - **Plans:** features, quotas, metering, settings; members, roles, invitations, impersonation; an audit log; a management API; and tenant-aware rate limits.
 
-What the guards cannot see: `DB::table()` queries and `withoutGlobalScopes()` bypass tenant scoping, and models that define their own `newEloquentBuilder()` should use `GuardsTenantWrites` on that builder. The `header` and `path` resolvers let a client name any tenant, so pair them with a membership check (`tenant.member` or your own).
+What the guards cannot see: `DB::table()` queries and `withoutGlobalScopes()` bypass tenant scoping, and models that define their own `newEloquentBuilder()` should use `GuardsTenantWrites` on that builder. The `header` and `path` resolvers let a client name any tenant, so pair them with a membership check (`tenant.member` or your own). Identify by session or user with `tenant.session`.
