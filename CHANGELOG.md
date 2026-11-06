@@ -40,3 +40,5 @@
   - Nested central domains resolve.
   - JSON errors outside debug mode show public messages only.
   - The audit checks each model's own tenant column and connection, works with table prefixes, and uses a tokenizer-based model finder.
+- The `tenant` middleware re-checks status and maintenance when a tenant was already set earlier in the request.
+- `$table->tenant()` always adds an explicit index (PostgreSQL and SQLite don't index foreign keys).

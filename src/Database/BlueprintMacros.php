@@ -28,11 +28,13 @@ final class BlueprintMacros
                 default => $this->foreignUlid($column),
             };
 
+            // Always an explicit index: PostgreSQL and SQLite do not index foreign keys,
+            // and MySQL reuses this index for the constraint instead of adding a second one.
+            $definition->index();
+
             if ($constrained) {
                 $tenantModel = config('tenancy.models.tenant');
                 $definition->constrained((new $tenantModel)->getTable())->cascadeOnDelete();
-            } else {
-                $definition->index();
             }
 
             return $definition;

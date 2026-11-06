@@ -34,8 +34,13 @@ class InitializeTenancy
             throw new \InvalidArgumentException('The session and user resolvers need the session and the signed-in user: use the tenant.session middleware.');
         }
 
-        if ($this->tenancy->initialized()) {
-            return $next($request);
+        // Set earlier in the request (another middleware, a service provider): still gate it.
+        if ($current = $this->tenancy->current()) {
+            if (config('tenancy.identification.require_active', true)) {
+                AccessGuard::assertAccessible($current);
+            }
+
+            return app(Maintenance::class)->check($request, $current) ?? $next($request);
         }
 
         $tenant = $this->pipeline->resolve($request, array_values($resolvers));
