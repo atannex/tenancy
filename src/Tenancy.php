@@ -17,6 +17,7 @@ use Atannex\Tenancy\Exceptions\TenantNotFound;
 use Closure;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Foundation\Bus\PendingDispatch;
 use InvalidArgumentException;
 use Throwable;
 
@@ -218,6 +219,12 @@ final class Tenancy
             }
 
             throw $e;
+        }
+
+        // fn () => Job::dispatch() returns a PendingDispatch that dispatches when
+        // destroyed; destroy it here, inside the context, not after leaving it.
+        if ($result instanceof PendingDispatch) {
+            $result = null;
         }
 
         $this->unwindTo($depth);

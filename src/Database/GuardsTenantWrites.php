@@ -50,7 +50,7 @@ trait GuardsTenantWrites
         return $this->toBase()->insertGetId($this->stampTenantRows($values)[0], $sequence);
     }
 
-    public function upsert(array $values, $uniqueBy, $update = null)
+    public function upsert(array $values, mixed $uniqueBy, $update = null)
     {
         $column = $this->getModel()->getTenantColumn();
 

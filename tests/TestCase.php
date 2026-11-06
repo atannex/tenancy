@@ -36,6 +36,11 @@ abstract class TestCase extends Orchestra
         $app['config']->set('cache.default', 'array');
         $app['config']->set('tenancy.identification.central_domains', ['central.test']);
         $app['config']->set('tenancy.audit.paths', [__DIR__.'/Fixtures/Models']);
+        $app['config']->set('tenancy.audit.ignore_tables', ['tenants', 'tenant_domains', 'jobs', 'failed_jobs']);
+        $app['config']->set('tenancy.migrations.paths', [__DIR__.'/Fixtures/tenant-migrations']);
+        $app['config']->set('tenancy.database.sqlite_path', sys_get_temp_dir().'/atannex-tenancy-tests/'.getmypid());
+        $app['config']->set('queue.connections.database', ['driver' => 'database', 'connection' => 'testing', 'table' => 'jobs', 'queue' => 'default', 'retry_after' => 90]);
+        $app['config']->set('queue.failed', ['driver' => 'database-uuids', 'database' => 'testing', 'table' => 'failed_jobs']);
     }
 
     protected function defineDatabaseMigrations(): void

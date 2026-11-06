@@ -2,10 +2,18 @@
 
 declare(strict_types=1);
 
+use Atannex\Tenancy\Bootstrappers\CacheBootstrapper;
+use Atannex\Tenancy\Bootstrappers\DatabaseBootstrapper;
+use Atannex\Tenancy\Bootstrappers\FilesystemBootstrapper;
+use Atannex\Tenancy\Bootstrappers\LogBootstrapper;
 use Atannex\Tenancy\Identification\DomainResolver;
 use Atannex\Tenancy\Identification\HeaderResolver;
 use Atannex\Tenancy\Identification\PathResolver;
 use Atannex\Tenancy\Identification\SubdomainResolver;
+use Atannex\Tenancy\Isolation\Managers\MySqlDatabaseManager;
+use Atannex\Tenancy\Isolation\Managers\PostgresDatabaseManager;
+use Atannex\Tenancy\Isolation\Managers\SqliteDatabaseManager;
+use Atannex\Tenancy\Isolation\Managers\SqlServerDatabaseManager;
 use Atannex\Tenancy\Models\Domain;
 use Atannex\Tenancy\Models\Tenant;
 
@@ -22,6 +30,24 @@ return [
         'tenant_column' => 'tenant_id',
         // ulid | uuid | int — the type $table->tenant() creates.
         'key_type' => 'ulid',
+        // Dedicated tiers: the connection whose server/credentials tenant databases are created on
+        // (null = the central connection), the name tenants connect under, and database names.
+        'template_connection' => env('TENANCY_TEMPLATE_CONNECTION'),
+        'tenant_connection' => 'tenant',
+        'prefix' => 'tenant_',
+        'sqlite_path' => null, // null = database_path('tenants')
+        // Give each dedicated tenant its own database login (MySQL/MariaDB/PostgreSQL).
+        'dedicated_users' => false,
+        'user_hosts' => ['%', 'localhost'], // MySQL/MariaDB account hosts for dedicated users
+        // Tier for new tenants: shared | schema | database.
+        'default_tier' => 'shared',
+        'managers' => [
+            'mysql' => MySqlDatabaseManager::class,
+            'mariadb' => MySqlDatabaseManager::class,
+            'pgsql' => PostgresDatabaseManager::class,
+            'sqlite' => SqliteDatabaseManager::class,
+            'sqlsrv' => SqlServerDatabaseManager::class,
+        ],
         // Load the package migrations directly. Set false once you publish them (tenancy:install).
         'load_migrations' => true,
     ],
@@ -60,10 +86,58 @@ return [
     ],
 
     // Classes implementing Atannex\Tenancy\Contracts\Bootstrapper, run in order on entering a tenant.
-    'bootstrappers' => [],
+    // Also available: RedisBootstrapper, SessionBootstrapper, UrlBootstrapper,
+    // ConfigBootstrapper, MailBootstrapper, ScoutBootstrapper.
+    'bootstrappers' => [
+        DatabaseBootstrapper::class,
+        CacheBootstrapper::class,
+        FilesystemBootstrapper::class,
+        LogBootstrapper::class,
+    ],
+
+    'cache' => [
+        // Stores given a per-tenant key space. Null = the default store.
+        'stores' => null,
+    ],
+
+    'redis' => [
+        // Connections prefixed per tenant. Never list the queue's connection.
+        'connections' => ['default'],
+    ],
+
+    'filesystem' => [
+        'disks' => ['local', 'public'],
+        'suffix' => 'tenants/{key}',
+        // Also give each tenant its own storage_path().
+        'storage_path' => false,
+    ],
+
+    'url' => [
+        'scheme' => 'https',
+    ],
+
+    // ConfigBootstrapper: config key => tenant path (data_get, or "settings.x").
+    'config_map' => [],
+
+    'mail' => [
+        'from' => [
+            'address' => 'data.mail.from_address',
+            'name' => 'name',
+        ],
+    ],
+
+    'queue' => [
+        // Run jobs of suspended/archived tenants anyway (default: the job fails).
+        'run_inactive' => false,
+    ],
 
     // End tenancy after each request (and each Octane request) so no state leaks.
     'reset_between_requests' => true,
+
+    'migrations' => [
+        // Tenant migrations. Shared-tier tenants get them once on the central database.
+        'paths' => [database_path('migrations/tenant')],
+    ],
 
     'audit' => [
         'paths' => [app_path('Models')],

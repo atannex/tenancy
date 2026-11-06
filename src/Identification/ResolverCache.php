@@ -4,8 +4,9 @@ declare(strict_types=1);
 
 namespace Atannex\Tenancy\Identification;
 
+use Atannex\Tenancy\Cache\PrefixedStore;
 use Closure;
-use Illuminate\Contracts\Cache\Repository as Cache;
+use Illuminate\Contracts\Cache\Store;
 
 /**
  * Host/slug → tenant key. Only hits are cached, so a new domain works at once;
@@ -50,8 +51,11 @@ final class ResolverCache
         $this->store()->forget($key);
     }
 
-    private function store(): Cache
+    /** The central store, never a tenant-prefixed one. */
+    private function store(): Store
     {
-        return app('cache')->store(config('tenancy.identification.cache.store'));
+        $store = app('cache')->store(config('tenancy.identification.cache.store'))->getStore();
+
+        return $store instanceof PrefixedStore ? $store->inner() : $store;
     }
 }

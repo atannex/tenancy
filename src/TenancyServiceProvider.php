@@ -4,11 +4,8 @@ declare(strict_types=1);
 
 namespace Atannex\Tenancy;
 
+use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Contracts\Http\Kernel;
-use Illuminate\Queue\Events\JobExceptionOccurred;
-use Illuminate\Queue\Events\JobFailed;
-use Illuminate\Queue\Events\JobProcessed;
-use Illuminate\Queue\Events\JobProcessing;
 use Illuminate\Support\ServiceProvider;
 use Laravel\Octane\Events\RequestReceived;
 
@@ -23,6 +20,8 @@ final class TenancyServiceProvider extends ServiceProvider
         $this->app->singleton(Identification\ResolverCache::class);
         $this->app->singleton(Identification\ResolverPipeline::class);
         $this->app->singleton(Identification\PathDefaults::class);
+        $this->app->singleton(Queue\QueueTenancy::class);
+        $this->app->singleton(Isolation\TenantDatabase::class);
     }
 
     public function boot(): void
@@ -40,6 +39,52 @@ final class TenancyServiceProvider extends ServiceProvider
         $this->publishes([__DIR__.'/../config/tenancy.php' => config_path('tenancy.php')], 'tenancy-config');
         $this->publishesMigrations([__DIR__.'/../database/migrations' => database_path('migrations')], 'tenancy-migrations');
 
+        $this->registerMiddleware();
+
+        Database\BlueprintMacros::register();
+        Database\TenantRules::register();
+
+        $events = $this->app['events'];
+        $events->listen(Events\TenancyInitialized::class, fn (Events\TenancyInitialized $e) => $this->app->make(Identification\PathDefaults::class)->initialized($e->tenant));
+        $events->listen(Events\TenancyEnded::class, fn () => $this->app->make(Identification\PathDefaults::class)->ended());
+
+        // Jobs carry their tenant, and tenancy is reset around every job.
+        $this->app->make(Queue\QueueTenancy::class)->register();
+
+        Schedule::macro('forEachTenant', function (string $command, bool $queue = true) {
+            /** @var Schedule $this */
+            return $this->command('tenants:run', array_filter([$command, '--queue' => $queue]));
+        });
+
+        if ($config->get('tenancy.reset_between_requests', true)) {
+            $reset = fn () => $this->app->make(Tenancy::class)->reset();
+
+            $this->app->terminating($reset);
+
+            if (class_exists(RequestReceived::class)) {
+                $events->listen(RequestReceived::class, $reset);
+            }
+        }
+
+        if ($this->app->runningInConsole()) {
+            $this->commands([
+                Console\InstallCommand::class,
+                Console\ListTenantsCommand::class,
+                Console\CreateTenantCommand::class,
+                Console\AuditCommand::class,
+                Console\DoctorCommand::class,
+                Console\RunCommand::class,
+                Console\MigrateCommand::class,
+                Console\RollbackCommand::class,
+                Console\FreshCommand::class,
+                Console\SeedCommand::class,
+                Console\StatusCommand::class,
+            ]);
+        }
+    }
+
+    private function registerMiddleware(): void
+    {
         $router = $this->app['router'];
         $router->aliasMiddleware('tenant', Http\Middleware\InitializeTenancy::class);
         $router->aliasMiddleware('tenant.optional', Http\Middleware\InitializeTenancyIfPossible::class);
@@ -52,44 +97,6 @@ final class TenancyServiceProvider extends ServiceProvider
         if (method_exists($kernel, 'prependToMiddlewarePriority')) {
             $kernel->prependToMiddlewarePriority(Http\Middleware\InitializeTenancy::class);
             $kernel->prependToMiddlewarePriority(Http\Middleware\InitializeTenancyIfPossible::class);
-        }
-
-        Database\BlueprintMacros::register();
-        Database\TenantRules::register();
-
-        $events = $this->app['events'];
-        $events->listen(Events\TenancyInitialized::class, fn (Events\TenancyInitialized $e) => $this->app->make(Identification\PathDefaults::class)->initialized($e->tenant));
-        $events->listen(Events\TenancyEnded::class, fn () => $this->app->make(Identification\PathDefaults::class)->ended());
-
-        if ($config->get('tenancy.reset_between_requests', true)) {
-            $reset = fn () => $this->app->make(Tenancy::class)->reset();
-
-            $this->app->terminating($reset);
-
-            // A job that forgets to end tenancy must not hand its tenant to the next job.
-            $events->listen([
-                JobProcessing::class,
-                JobProcessed::class,
-                JobFailed::class,
-                JobExceptionOccurred::class,
-            ], $reset);
-
-            if (class_exists(RequestReceived::class)) {
-                $this->app['events']->listen(
-                    RequestReceived::class,
-                    fn () => $this->app->make(Tenancy::class)->reset(),
-                );
-            }
-        }
-
-        if ($this->app->runningInConsole()) {
-            $this->commands([
-                Console\InstallCommand::class,
-                Console\ListTenantsCommand::class,
-                Console\CreateTenantCommand::class,
-                Console\AuditCommand::class,
-                Console\DoctorCommand::class,
-            ]);
         }
     }
 }

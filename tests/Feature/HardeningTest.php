@@ -116,7 +116,7 @@ it('reads the live config, not the one it was built with', function () {
 // Important 7
 it('resets between queue jobs', function () {
     Tenancy::initialize($this->a);
-    event(new JobProcessed('sync', Mockery::mock(Job::class)));
+    event(new JobProcessed('database', Mockery::mock(Job::class)));
 
     expect(Tenancy::current())->toBeNull();
 });
