@@ -83,6 +83,20 @@ final class PrefixedStore implements LockProvider, Store
         return method_exists($this->inner, 'touch') ? $this->inner->touch($this->key($key), $seconds) : false;
     }
 
+    /** Atomic when the wrapped store supports it (Repository::add() would otherwise get, then put). */
+    public function add($key, $value, $seconds)
+    {
+        if (method_exists($this->inner, 'add')) {
+            return $this->inner->add($this->key($key), $value, $seconds);
+        }
+
+        if ($this->get($key) !== null) {
+            return false;
+        }
+
+        return $this->put($key, $value, $seconds);
+    }
+
     public function forget($key)
     {
         return $this->inner->forget($this->key($key));
@@ -112,7 +126,7 @@ final class PrefixedStore implements LockProvider, Store
         return $this->lockProvider()->restoreLock($this->tenantNamespace().$name, $owner);
     }
 
-    /** Tags are namespaced per tenant (taggable drivers only). */
+    /** Tags are namespaced per tenant and cache version, so flush() clears them too (taggable drivers only). */
     public function tags($names)
     {
         if (! method_exists($this->inner, 'tags')) {
@@ -121,7 +135,7 @@ final class PrefixedStore implements LockProvider, Store
 
         $names = is_array($names) ? $names : func_get_args();
 
-        return $this->inner->tags(array_map(fn ($name) => $this->tenantNamespace().$name, $names));
+        return $this->inner->tags(array_map(fn ($name) => $this->prefix().$name, $names));
     }
 
     private function lockProvider(): LockProvider

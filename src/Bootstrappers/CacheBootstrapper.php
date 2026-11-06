@@ -7,7 +7,9 @@ namespace Atannex\Tenancy\Bootstrappers;
 use Atannex\Tenancy\Cache\PrefixedStore;
 use Atannex\Tenancy\Contracts\Bootstrapper;
 use Atannex\Tenancy\Contracts\Tenant;
+use Atannex\Tenancy\Tenancy;
 use Illuminate\Contracts\Cache\Store;
+use Illuminate\Support\Facades\DB;
 
 /** Points the configured cache stores at the tenant's own key space (every driver). */
 final class CacheBootstrapper implements Bootstrapper
@@ -17,8 +19,12 @@ final class CacheBootstrapper implements Bootstrapper
 
     public function bootstrap(Tenant $tenant): void
     {
+        $central = app(Tenancy::class)->centralConnection();
+
         foreach ($this->stores() as $name) {
-            $repository = app('cache')->store($name);
+            // A database store built now must use the central connection, not
+            // the dedicated tenant's database the default may point at.
+            $repository = DB::usingConnection($central, fn () => app('cache')->store($name));
             $store = $repository->getStore();
             $store = $store instanceof PrefixedStore ? $store->inner() : $store;
 

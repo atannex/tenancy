@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Atannex\Tenancy\Models;
 
+use Atannex\Tenancy\Contracts\Tenant;
 use Atannex\Tenancy\Database\OnCentralConnection;
 use Atannex\Tenancy\Domains\AliasRedirect;
 use Atannex\Tenancy\Enums\DomainType;
@@ -22,6 +23,11 @@ use InvalidArgumentException;
  * @property string $host
  * @property DomainType $type
  * @property Carbon|null $verified_at
+ * @property string|null $verification_token
+ * @property string|null $tls_status
+ * @property Carbon|null $created_at
+ * @property Carbon|null $updated_at
+ * @property-read Tenant&Model $tenant
  */
 class Domain extends Model
 {
@@ -29,7 +35,8 @@ class Domain extends Model
 
     protected $table = 'tenant_domains';
 
-    protected $fillable = ['tenant_id', 'host', 'type', 'verified_at', 'verification_token', 'tls_status'];
+    /** verified_at and verification_token are set by Domains only: mass assignment can't skip the DNS proof. */
+    protected $fillable = ['tenant_id', 'host', 'type', 'tls_status'];
 
     protected $attributes = ['type' => 'primary'];
 
@@ -44,6 +51,10 @@ class Domain extends Model
     protected static function booted(): void
     {
         static::saving(function (self $domain): void {
+            if (! Hosts::isValid((string) $domain->host)) {
+                throw new InvalidArgumentException("Domain [{$domain->host}] is not a valid hostname.");
+            }
+
             foreach ((array) config('tenancy.identification.central_domains', []) as $central) {
                 $central = Hosts::normalize($central);
 

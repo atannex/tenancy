@@ -8,10 +8,12 @@ use Atannex\Tenancy\Contracts\Tenant;
 use Atannex\Tenancy\Database\OnCentralConnection;
 use Atannex\Tenancy\Enums\MembershipStatus;
 use Atannex\Tenancy\Exceptions\NotAMember;
+use Atannex\Tenancy\Integrations\Sanctum\SanctumTenancy;
 use Atannex\Tenancy\Models\Membership;
 use Atannex\Tenancy\Tenancy;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
+use Laravel\Sanctum\NewAccessToken;
 
 /**
  * For the app's user model. Users stay central; one user can belong to many
@@ -33,14 +35,17 @@ trait HasTenants
         return Membership::query()->where('user_id', (string) $this->getKey());
     }
 
-    /** Tenants this user is an active member of. */
+    /**
+     * Tenants this user is an active member of.
+     *
+     * @return Builder<Model&Tenant>
+     */
     public function tenants(): Builder
     {
-        $model = config('tenancy.models.tenant');
-        $tenant = new $model;
+        $query = app(Tenancy::class)->query();
 
-        return $model::query()->whereIn(
-            $tenant->getKeyName(),
+        return $query->whereIn(
+            $query->getModel()->getKeyName(),
             $this->memberships()->where('status', MembershipStatus::Active->value)->select('tenant_id'),
         );
     }
@@ -97,6 +102,18 @@ trait HasTenants
         $tenants = $this->tenants()->limit(2)->get();
 
         return $tenants->count() === 1 ? $tenants->first() : null;
+    }
+
+    /**
+     * Sanctum: a personal access token that works only inside $tenant (with
+     * the tenant.token middleware). Needs HasApiTokens and the
+     * tenancy-sanctum-migrations column.
+     *
+     * @param  list<string>  $abilities
+     */
+    public function createTenantToken(Tenant|string $tenant, string $name, array $abilities = ['*'], ?\DateTimeInterface $expiresAt = null): NewAccessToken
+    {
+        return SanctumTenancy::createToken($this, $tenant, $name, $abilities, $expiresAt);
     }
 
     public function switchTenant(Tenant|string $tenant): Tenant

@@ -17,7 +17,8 @@ it('creates a tenant with ulid key and defaults', function () {
 });
 
 it('stores app data and encrypted connection overrides', function () {
-    $tenant = Tenant::create(['name' => 'Acme', 'data' => ['colour' => 'red'], 'connection' => ['password' => 's3cret']]);
+    $tenant = Tenant::create(['name' => 'Acme', 'data' => ['colour' => 'red']]);
+    $tenant->forceFill(['connection' => ['password' => 's3cret']])->save();
     $fresh = $tenant->fresh();
 
     expect($fresh->data['colour'])->toBe('red')

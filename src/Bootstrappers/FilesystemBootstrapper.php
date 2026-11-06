@@ -47,6 +47,8 @@ final class FilesystemBootstrapper implements Bootstrapper
             app('filesystem')->forgetDisk($disk);
         }
 
+        $this->forgetDefaultDisks();
+
         if (config('tenancy.filesystem.storage_path', false)) {
             $this->storagePath = app()->storagePath();
             app()->useStoragePath($this->storagePath.'/'.$suffix);
@@ -64,7 +66,18 @@ final class FilesystemBootstrapper implements Bootstrapper
             app()->useStoragePath($this->storagePath);
         }
 
+        if ($this->originals !== []) {
+            $this->forgetDefaultDisks();
+        }
+
         $this->originals = [];
         $this->storagePath = null;
+    }
+
+    /** The Filesystem and Cloud contracts are singletons built from the default disks: rebuild them too. */
+    private function forgetDefaultDisks(): void
+    {
+        app()->forgetInstance('filesystem.disk');
+        app()->forgetInstance('filesystem.cloud');
     }
 }

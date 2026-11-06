@@ -1,0 +1,44 @@
+includes:
+    - vendor/larastan/larastan/extension.neon
+
+parameters:
+    level: 5
+    paths:
+        - src
+        - database
+        # Fixture models are the only users of the package's traits, so the traits get analysed through them.
+        - tests/Fixtures/Models
+    tmpDir: .phpstan.cache
+
+    ignoreErrors:
+        # Optional integration: Octane is not a dependency; the listeners are behind class_exists().
+        -
+            message: '#^Class Laravel\\Octane\\Events\\(RequestReceived|TaskReceived|TickReceived) not found\.$#'
+            path: src/TenancyServiceProvider.php
+        # BelongsToTenant is a trait, so "a model using it" has no PHPStan type; these models do have the methods.
+        -
+            message: '#^Call to an undefined method .+::(getTenantColumn|getQualifiedTenantColumn)\(\)\.$#'
+            paths:
+                - src/Database/*
+                - src/Lifecycle/TenantTables.php
+                - src/Support/IsolationAudit.php
+        # Same for users with HasApiTokens and HasTenants (both traits).
+        -
+            message: '#^Call to an undefined method Illuminate\\Database\\Eloquent\\Model::(belongsToTenant|generateTokenString|tokens)\(\)\.$#'
+            path: src/Integrations/Sanctum/SanctumTenancy.php
+        # Store::touch() exists only on Laravel 13; Laravel 12 stores need the check.
+        -
+            identifier: function.alreadyNarrowedType
+            path: src/Cache/PrefixedStore.php
+        # The HTTP kernel may be an app's own Kernel contract implementation without middleware priority.
+        -
+            identifier: function.alreadyNarrowedType
+            path: src/TenancyServiceProvider.php
+        # parent::setKeysForSaveQuery() inside a trait loses the static generic; the parent returns Builder<static>.
+        -
+            message: '#^Method .+::setKeysForSaveQuery\(\) should return Illuminate\\Database\\Eloquent\\Builder<.+> but returns Illuminate\\Database\\Eloquent\\Builder<Illuminate\\Database\\Eloquent\\Model>\.$#'
+            path: src/Database/BelongsToTenant.php
+        # A trait for the host app's test cases; nothing analysed here uses it.
+        -
+            identifier: trait.unused
+            path: src/Testing/InteractsWithTenancy.php

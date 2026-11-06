@@ -12,7 +12,7 @@ use Illuminate\Database\Eloquent\Scope;
 
 final class TenantScope implements Scope
 {
-    /** @param Model&BelongsToTenant $model */
+    /** @param  Model  $model  a model using BelongsToTenant */
     public function apply(Builder $builder, Model $model): void
     {
         $tenancy = app(Tenancy::class);

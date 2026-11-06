@@ -19,9 +19,15 @@ final class RedisBootstrapper implements Bootstrapper
     /** @var array<string, string> */
     private array $originals = [];
 
+    /** The key prefix one tenant's keys get, after the connection's own. */
+    public static function prefix(Tenant $tenant): string
+    {
+        return 'tenant_'.$tenant->getTenantKey().':';
+    }
+
     public function bootstrap(Tenant $tenant): void
     {
-        foreach ((array) config('tenancy.redis.connections', ['default']) as $name) {
+        foreach ((array) config('tenancy.redis.connections', []) as $name) {
             $client = Redis::connection($name)->client();
 
             if (! $client instanceof \Redis) {
@@ -30,7 +36,7 @@ final class RedisBootstrapper implements Bootstrapper
 
             $original = (string) $client->getOption(\Redis::OPT_PREFIX);
             $this->originals[$name] = $original;
-            $client->setOption(\Redis::OPT_PREFIX, $original.'tenant_'.$tenant->getTenantKey().':');
+            $client->setOption(\Redis::OPT_PREFIX, $original.self::prefix($tenant));
         }
     }
 

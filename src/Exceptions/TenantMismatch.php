@@ -26,6 +26,11 @@ final class TenantMismatch extends TenancyException
         return new self("Upserts of [{$model}] must include [{$column}] in uniqueBy, or they can overwrite another tenant's rows.");
     }
 
+    public static function centralOnly(string $model, string $operation): self
+    {
+        return new self("{$operation}() on [{$model}] reaches every tenant's rows; run it in Tenancy::central().");
+    }
+
     public function getStatusCode(): int
     {
         return 409;

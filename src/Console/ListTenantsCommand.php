@@ -23,7 +23,7 @@ final class ListTenantsCommand extends Command
 
         $this->table(
             ['Key', 'Slug', 'Name', 'Status', 'Isolation', 'Domains'],
-            $query->get()->map(fn ($t) => [$t->getTenantKey(), $t->slug, $t->name, $t->status->value, $t->isolation->value, $t->domains_count])->all(),
+            $query->get()->map(fn ($t) => [$t->getTenantKey(), $t->getTenantSlug(), $t->getAttribute('name'), $t->tenantStatus()->value, $t->isolationTier()->value, $t->getAttribute('domains_count')])->all(),
         );
 
         return self::SUCCESS;

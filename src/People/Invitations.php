@@ -76,10 +76,20 @@ final class Invitations
         $tenant = app(Tenancy::class)->findByKey($invitation->tenant_id) ?? throw InvitationInvalid::notFound();
 
         return DB::connection(app(Tenancy::class)->centralConnection())->transaction(function () use ($invitation, $user, $tenant) {
+            // Claim it atomically: two people racing with one link can't both join.
+            $claimed = Invitation::query()->whereKey($invitation->getKey())
+                ->whereNull('accepted_at')->whereNull('revoked_at')->where('expires_at', '>', now())
+                ->update(['accepted_at' => now(), 'accepted_by' => Users::key($user)]);
+
+            if ($claimed !== 1) {
+                throw InvitationInvalid::accepted();
+            }
+
+            $invitation->refresh();
+
             // An existing member keeps their role; an invitation never changes it.
             $existing = $this->members->find($tenant, $user);
             $membership = $existing?->isActive() ? $existing : $this->members->add($tenant, $user, $invitation->role, Users::find($invitation->invited_by));
-            $invitation->update(['accepted_at' => now(), 'accepted_by' => Users::key($user)]);
             event(new InvitationAccepted($tenant, $invitation, $membership));
 
             return $membership;

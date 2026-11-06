@@ -32,8 +32,12 @@ final class MySqlDatabaseManager extends ServerManager implements ManagesDatabas
         $admin = $this->admin($server);
         $user = $this->identifier($username);
 
+        $secret = $this->password($password);
+
+        // IF NOT EXISTS + ALTER: a retry after a half-finished create sets the new password instead of failing.
         foreach ($this->hosts() as $host) {
-            $admin->statement("CREATE USER '{$user}'@'{$host}' IDENTIFIED BY '{$this->password($password)}'");
+            $admin->statement("CREATE USER IF NOT EXISTS '{$user}'@'{$host}'");
+            $this->secretStatement($admin, "ALTER USER '{$user}'@'{$host}' IDENTIFIED BY '{$secret}'", $password);
             $admin->statement("GRANT ALL PRIVILEGES ON `{$this->identifier($database)}`.* TO '{$user}'@'{$host}'");
         }
     }

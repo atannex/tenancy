@@ -3,7 +3,9 @@
 declare(strict_types=1);
 
 use Atannex\Tenancy\Events\TenantResolved;
+use Atannex\Tenancy\Exceptions\IllegalTransition;
 use Atannex\Tenancy\Identification\ResolverPipeline;
+use Atannex\Tenancy\Lifecycle\TenantLifecycle;
 use Atannex\Tenancy\Models\Tenant;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -79,9 +81,13 @@ it('forgets cached slugs when a tenant slug changes', function () {
         ->and(resolveFor('http://acme-2.central.test/'))->toBe('acme-2');
 });
 
-it('ignores soft-deleted tenants', function () {
+it('refuses plain deletes and forgets purged tenants', function () {
     resolveFor('http://acme.example.com/');
-    $this->acme->delete();
+
+    expect(fn () => $this->acme->delete())->toThrow(IllegalTransition::class, 'archive');
+
+    app(TenantLifecycle::class)->archive($this->acme);
+    app(TenantLifecycle::class)->purge($this->acme->refresh());
 
     expect(resolveFor('http://acme.example.com/'))->toBeNull()
         ->and(resolveFor('http://acme.central.test/'))->toBeNull();

@@ -19,7 +19,7 @@ final class RetryCommand extends Command
     public function handle(): int
     {
         $ok = app(Provisioner::class)->provision($tenant = $this->tenant());
-        $ok ? $this->components->info("Tenant [{$tenant->slug}] provisioned.") : $this->components->error("Provisioning [{$tenant->slug}] failed again; see tenant_provisioning_steps.");
+        $ok ? $this->components->info("Tenant [{$tenant->getTenantSlug()}] provisioned.") : $this->components->error("Provisioning [{$tenant->getTenantSlug()}] failed again; see tenant_provisioning_steps.");
 
         return $ok ? self::SUCCESS : self::FAILURE;
     }

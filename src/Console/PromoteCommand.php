@@ -36,7 +36,7 @@ final class PromoteCommand extends Command
             return self::FAILURE;
         }
 
-        $this->components->info("Tenant [{$tenant->slug}] is now on the {$to->value} tier.");
+        $this->components->info("Tenant [{$tenant->getTenantSlug()}] is now on the {$to->value} tier.");
 
         return self::SUCCESS;
     }

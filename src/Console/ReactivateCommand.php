@@ -19,7 +19,7 @@ final class ReactivateCommand extends Command
     public function handle(): int
     {
         app(TenantLifecycle::class)->reactivate($tenant = $this->tenant());
-        $this->components->info("Tenant [{$tenant->slug}] reactivated.");
+        $this->components->info("Tenant [{$tenant->getTenantSlug()}] reactivated.");
 
         return self::SUCCESS;
     }

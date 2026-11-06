@@ -33,7 +33,7 @@ final class TenantLifecycle
 
     public function canTransition(Tenant $tenant, S $to): bool
     {
-        return in_array($to, self::ALLOWED[$tenant->tenantStatus()->value] ?? [], true);
+        return in_array($to, self::ALLOWED[$tenant->tenantStatus()->value], true);
     }
 
     /** @param array<string, mixed> $attributes */
@@ -43,7 +43,32 @@ final class TenantLifecycle
             throw IllegalTransition::between($tenant, $to);
         }
 
-        $tenant->forceFill(['status' => $to] + $attributes)->save();
+        $from = $tenant->tenantStatus();
+
+        if (! $tenant->exists) {
+            $tenant->forceFill(['status' => $to] + $attributes)->save();
+
+            return;
+        }
+
+        // Claim the move with a conditional update first: of two workers holding
+        // the same stale state (two ProvisionTenant jobs, a retry beside a
+        // queued job), only one wins. The save then runs the model events.
+        $tenant->getConnection()->transaction(function () use ($tenant, $from, $to, $attributes): void {
+            $claimed = $tenant->newQueryWithoutScopes()
+                ->whereKey($tenant->getKey())
+                ->where('status', $from->value)
+                ->toBase()
+                ->update(['status' => $to->value]);
+
+            if ($claimed !== 1) {
+                $tenant->setAttribute('status', $tenant->newQueryWithoutScopes()->whereKey($tenant->getKey())->value('status') ?? $from->value)->syncOriginalAttribute('status');
+
+                throw IllegalTransition::between($tenant, $to);
+            }
+
+            $tenant->forceFill(['status' => $to] + $attributes)->save();
+        });
     }
 
     public function suspend(Tenant&Model $tenant, ?string $reason = null): void

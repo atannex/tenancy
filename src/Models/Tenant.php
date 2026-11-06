@@ -10,7 +10,9 @@ use Atannex\Tenancy\Database\OnCentralConnection;
 use Atannex\Tenancy\Enums\DomainType;
 use Atannex\Tenancy\Enums\IsolationTier;
 use Atannex\Tenancy\Enums\TenantStatus;
+use Atannex\Tenancy\Exceptions\IllegalTransition;
 use Atannex\Tenancy\Identification\ResolverCache;
+use Atannex\Tenancy\Lifecycle\Purger;
 use Atannex\Tenancy\Plans\InteractsWithPlans;
 use Atannex\Tenancy\Tenancy;
 use Closure;
@@ -19,7 +21,7 @@ use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
-use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Str;
 use InvalidArgumentException;
 
@@ -32,21 +34,31 @@ use InvalidArgumentException;
  * @property array<string, mixed>|null $connection
  * @property string|null $plan
  * @property \ArrayObject<string, mixed>|null $data
+ * @property Carbon|null $trial_ends_at
+ * @property Carbon|null $suspended_at
+ * @property Carbon|null $archived_at
+ * @property Carbon|null $purge_after
+ * @property Carbon|null $created_at
+ * @property Carbon|null $updated_at
  */
 class Tenant extends Model implements TenantContract
 {
     /** @use HasFactory<TenantFactory> */
-    use HasFactory, HasUlids, InteractsWithPlans, OnCentralConnection, SoftDeletes;
+    use HasFactory, HasUlids, InteractsWithPlans, OnCentralConnection;
 
     /** One DNS label: lowercase letters, digits and inner hyphens, 1–63 chars. */
     public const string SLUG_PATTERN = '/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/';
 
     protected $table = 'tenants';
 
-    protected $fillable = [
-        'slug', 'name', 'status', 'isolation', 'connection', 'plan', 'data',
-        'trial_ends_at', 'suspended_at', 'archived_at', 'purge_after',
-    ];
+    /**
+     * Status, tier, connection overrides and lifecycle dates are not
+     * mass-assignable: a form that passes request input straight in must
+     * never activate a tenant or point it at another database host. The
+     * package sets them with forceFill(); Tenancy::create() accepts
+     * "isolation", "connection" and "trial_ends_at" explicitly.
+     */
+    protected $fillable = ['slug', 'name', 'plan', 'data'];
 
     protected $attributes = [
         'status' => 'active',
@@ -112,14 +124,32 @@ class Tenant extends Model implements TenantContract
         static::deleted($forget);
     }
 
+    /**
+     * Deleting a tenant row would orphan its database, rows and files, so
+     * only the purge may do it. Archive the tenant instead; tenants:purge
+     * removes it with everything it owns after the grace period.
+     */
+    public function delete(): ?bool
+    {
+        if ($this->exists && ! Purger::purging($this)) {
+            throw new IllegalTransition("Tenant [{$this->getTenantSlug()}] is not deleted directly: archive it (TenantLifecycle::archive() or tenants:archive), then purge it (tenants:purge).");
+        }
+
+        return parent::delete();
+    }
+
     protected static function newFactory(): TenantFactory
     {
         return TenantFactory::new();
     }
 
+    /** @return HasMany<Domain, $this> */
     public function domains(): HasMany
     {
-        return $this->hasMany(config('tenancy.models.domain'), 'tenant_id');
+        /** @var class-string<Domain> $model tenancy.models.domain extends Domain */
+        $model = config('tenancy.models.domain');
+
+        return $this->hasMany($model, 'tenant_id');
     }
 
     public function primaryDomain(): ?Domain

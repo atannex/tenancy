@@ -23,7 +23,7 @@ final class DownCommand extends Command
             'retry' => $this->option('retry') === null ? null : (int) $this->option('retry'),
             'message' => $this->option('message'),
         ]);
-        $this->components->info("Tenant [{$tenant->slug}] is down for maintenance.");
+        $this->components->info("Tenant [{$tenant->getTenantSlug()}] is down for maintenance.");
 
         return self::SUCCESS;
     }

@@ -11,6 +11,7 @@ use Atannex\Tenancy\Isolation\TenantDatabase;
 use Atannex\Tenancy\Support\ModelFinder;
 use Atannex\Tenancy\Tenancy;
 use Illuminate\Database\Connection;
+use Illuminate\Database\Schema\Builder;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
@@ -30,7 +31,7 @@ final class TenantTables
 
         if ($tier !== IsolationTier::Shared) {
             $schema = Schema::connection($this->connection($tenant, $tier)->getName());
-            $tables = array_diff($schema->getTableListing(schemaQualified: false), ['migrations']);
+            $tables = array_diff(self::listing($schema), ['migrations']);
 
             return array_fill_keys(array_values($tables), null);
         }
@@ -50,6 +51,17 @@ final class TenantTables
         }
 
         return $tables;
+    }
+
+    /**
+     * Tables of the connection's own database or schema only. Unqualified,
+     * MySQL and PostgreSQL list every database or schema on the server.
+     *
+     * @return list<string>
+     */
+    public static function listing(Builder $schema): array
+    {
+        return $schema->getTableListing($schema->getCurrentSchemaListing(), schemaQualified: false);
     }
 
     public function connection(Tenant $tenant, ?IsolationTier $tier = null): Connection

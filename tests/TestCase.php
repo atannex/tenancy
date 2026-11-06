@@ -28,12 +28,7 @@ abstract class TestCase extends Orchestra
     protected function defineEnvironment($app): void
     {
         $app['config']->set('database.default', 'testing');
-        $app['config']->set('database.connections.testing', [
-            'driver' => 'sqlite',
-            'database' => ':memory:',
-            'prefix' => '',
-            'foreign_key_constraints' => true,
-        ]);
+        $app['config']->set('database.connections.testing', self::centralConnection());
         $app['config']->set('app.key', 'base64:'.base64_encode(str_repeat('t', 32)));
         $app['config']->set('cache.default', 'array');
         $app['config']->set('tenancy.identification.central_domains', ['central.test']);
@@ -44,6 +39,36 @@ abstract class TestCase extends Orchestra
         $app['config']->set('queue.connections.database', ['driver' => 'database', 'connection' => 'testing', 'table' => 'jobs', 'queue' => 'default', 'retry_after' => 90]);
         $app['config']->set('queue.failed', ['driver' => 'database-uuids', 'database' => 'testing', 'table' => 'failed_jobs']);
         $app['config']->set('auth.providers.users.model', Fixtures\Models\User::class);
+    }
+
+    /**
+     * The central database: in-memory SQLite, or a real server when
+     * TENANCY_TEST_CENTRAL=mysql|pgsql (database TENANCY_TEST_CENTRAL_DATABASE,
+     * default tenancy_central; credentials from the TENANCY_TEST_{DRIVER}_* variables).
+     */
+    private static function centralConnection(): array
+    {
+        $driver = getenv('TENANCY_TEST_CENTRAL') ?: 'sqlite';
+
+        if ($driver === 'sqlite') {
+            return ['driver' => 'sqlite', 'database' => ':memory:', 'prefix' => '', 'foreign_key_constraints' => true];
+        }
+
+        $env = fn (string $key, string $default): string => getenv('TENANCY_TEST_'.strtoupper($driver).'_'.$key) ?: $default;
+        $mysql = $driver === 'mysql';
+
+        return [
+            'driver' => $driver,
+            'host' => $env('HOST', '127.0.0.1'),
+            'port' => $env('PORT', $mysql ? '3306' : '5432'),
+            'database' => getenv('TENANCY_TEST_CENTRAL_DATABASE') ?: 'tenancy_central',
+            'username' => $env('USERNAME', $mysql ? 'root' : 'postgres'),
+            'password' => $env('PASSWORD', ''),
+            'charset' => $mysql ? 'utf8mb4' : 'utf8',
+            'collation' => $mysql ? 'utf8mb4_unicode_ci' : null,
+            'prefix' => '',
+            'search_path' => 'public',
+        ];
     }
 
     /** Boot again with the TLS ask route registered (routes register at boot). */

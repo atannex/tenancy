@@ -5,10 +5,14 @@ declare(strict_types=1);
 use Atannex\Tenancy\Bootstrappers\DatabaseBootstrapper;
 use Atannex\Tenancy\Enums\IsolationTier;
 use Atannex\Tenancy\Facades\Tenancy;
+use Atannex\Tenancy\Isolation\Managers\MySqlDatabaseManager;
 use Atannex\Tenancy\Isolation\TenantDatabase;
+use Atannex\Tenancy\Lifecycle\Exporter;
+use Atannex\Tenancy\Lifecycle\TenantTables;
 use Atannex\Tenancy\Models\Tenant;
 use Atannex\Tenancy\Tests\Fixtures\Models\Note;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 /*
  * Opt-in: real servers. Only databases/schemas named tenancy_test_* and logins named tenancy_t_* are touched.
@@ -102,4 +106,60 @@ it('gives tenants their own login when dedicated_users is on', function () {
     }
 
     expect(DB::connection('tenancy_template')->selectOne('select count(*) as c from mysql.user where user = ?', [$connection['username']])->c)->toBe(0);
+});
+
+it('lists and exports only the tenant\'s own tables on a real server', function (?string $driver, ?IsolationTier $tier) {
+    if ($driver === null) {
+        $this->markTestSkipped('Set TENANCY_TEST_MYSQL=1 or TENANCY_TEST_PGSQL=1 to run against real servers.');
+    }
+
+    useServer($driver);
+    $db = app(TenantDatabase::class);
+    $a = Tenant::factory()->create(['isolation' => $tier]);
+    $b = Tenant::factory()->create(['isolation' => $tier]);
+
+    try {
+        $db->create($a);
+        $db->create($b);
+        $this->artisan('tenants:migrate', ['--tenants' => [$a->slug, $b->slug]])->assertSuccessful();
+        Tenancy::run($b, fn () => Schema::create('only_in_b', fn ($table) => $table->id()));
+        Tenancy::run($a, fn () => Note::create(['body' => 'alpha']));
+
+        expect(array_keys(app(TenantTables::class)->for($a->fresh())))->toBe(['notes']);
+
+        $zip = app(Exporter::class)->export($a->fresh(), sys_get_temp_dir().'/atx-'.uniqid().'.zip');
+        $archive = new ZipArchive;
+        $archive->open($zip);
+        expect(json_decode($archive->getFromName('manifest.json'), true)['tables'])->toBe(['notes' => 1]);
+        $archive->close();
+        @unlink($zip);
+    } finally {
+        Tenancy::reset();
+        $db->delete($a->fresh());
+        $db->delete($b->fresh());
+    }
+})->with('server tiers');
+
+it('creates a dedicated login again after a half-finished attempt', function () {
+    if (! getenv('TENANCY_TEST_MYSQL')) {
+        $this->markTestSkipped('Set TENANCY_TEST_MYSQL=1.');
+    }
+
+    useServer('mysql');
+    $manager = app(MySqlDatabaseManager::class);
+    $server = serverTemplate('mysql');
+
+    try {
+        $manager->create('tenancy_test_retry', $server);
+        $manager->createUser('tenancy_test_retry', 'tenancy_t_retry', 'first-password', $server);
+        // A retry generates a new password; the existing login must take it.
+        $manager->createUser('tenancy_test_retry', 'tenancy_t_retry', 'second-password', $server);
+
+        config(['database.connections.retry_login' => array_merge($server, ['database' => 'tenancy_test_retry', 'username' => 'tenancy_t_retry', 'password' => 'second-password'])]);
+        expect(DB::connection('retry_login')->selectOne('select database() as d')->d)->toBe('tenancy_test_retry');
+    } finally {
+        DB::purge('retry_login');
+        $manager->deleteUser('tenancy_t_retry', $server);
+        $manager->delete('tenancy_test_retry', $server);
+    }
 });

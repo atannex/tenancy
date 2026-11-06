@@ -16,6 +16,7 @@ beforeEach(function () {
     Route::middleware('tenant:path')->get('/t/{tenant}/named', fn () => 'ok')->name('named');
     Route::middleware('tenant:header')->get('/api/who', fn () => tenant()->getTenantSlug());
     Route::middleware('central')->get('/admin', fn () => Tenancy::inCentral() ? 'central' : 'no');
+    Route::middleware('central:all')->get('/ops', fn () => Tenancy::inCentral() ? 'central' : 'no');
 });
 
 it('initializes from the domain', function () {
@@ -42,27 +43,29 @@ it('resolves from a header', function () {
 });
 
 it('refuses suspended tenants', function () {
-    $this->acme->update(['status' => TenantStatus::Suspended]);
+    $this->acme->forceFill(['status' => TenantStatus::Suspended])->save();
     $this->get('http://acme.example.com/who')->assertStatus(423);
 });
 
 it('refuses archived and pending tenants', function () {
-    $this->acme->update(['status' => TenantStatus::Archived]);
+    $this->acme->forceFill(['status' => TenantStatus::Archived])->save();
     $this->get('http://acme.example.com/who')->assertStatus(410);
 
-    $this->acme->update(['status' => TenantStatus::Pending]);
+    $this->acme->forceFill(['status' => TenantStatus::Pending])->save();
     $this->get('http://acme.example.com/who')->assertStatus(503);
 });
 
 it('can serve inactive tenants when require_active is off', function () {
     config(['tenancy.identification.require_active' => false]);
-    $this->acme->update(['status' => TenantStatus::Suspended]);
+    $this->acme->forceFill(['status' => TenantStatus::Suspended])->save();
 
     $this->get('http://acme.example.com/who')->assertOk();
 });
 
 it('keeps central routes on central domains', function () {
-    $this->get('http://central.test/admin')->assertOk()->assertSee('central');
+    // Plain `central` only restricts the host; `central:all` lifts the tenant scope too.
+    $this->get('http://central.test/admin')->assertOk()->assertSee('no');
+    $this->get('http://central.test/ops')->assertOk()->assertSee('central');
     $this->get('http://acme.example.com/admin')->assertNotFound();
 });
 

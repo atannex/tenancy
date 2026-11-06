@@ -40,7 +40,7 @@ it('never resolves unverified custom domains', function () {
 });
 
 it('refuses domains on or under a central domain', function (string $host) {
-    $this->b->domains()->create(['host' => $host, 'verified_at' => now()]);
+    $this->b->domains()->forceCreate(['host' => $host, 'verified_at' => now()]);
 })->with(['central.test', 'aa.central.test'])->throws(InvalidArgumentException::class, 'central');
 
 // Important 2
@@ -146,7 +146,7 @@ it('does not mask the callback exception when unwinding fails', function () {
 
 // Important 9
 it('forgets cached hosts only after the transaction commits', function () {
-    $domain = $this->a->domains()->create(['host' => 'move.example.com', 'verified_at' => now()]);
+    $domain = $this->a->domains()->forceCreate(['host' => 'move.example.com', 'verified_at' => now()]);
     expect(hostTenant('http://move.example.com/'))->toBe('aa');
 
     DB::transaction(function () use ($domain) {

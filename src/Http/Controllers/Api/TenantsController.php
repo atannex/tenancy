@@ -104,7 +104,7 @@ final class TenantsController
         return new JsonResponse(['data' => $members->of($model, activeOnly: false)->map(fn ($m) => [
             'user_id' => $m->user_id,
             'role' => $m->role,
-            'status' => $m->status?->value ?? $m->status,
+            'status' => $m->status->value,
             'joined_at' => $m->joined_at?->toIso8601String(),
         ])->values()->all()]);
     }

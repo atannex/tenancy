@@ -146,7 +146,7 @@ it('purges a shared tenant: rows, files, cache and the tenant', function () {
     $this->lifecycle->archive($doomed);
     $this->artisan('tenants:purge', ['tenant' => $doomed->slug, '--force' => true])->assertSuccessful();
 
-    expect(Tenant::withTrashed()->find($doomed->id))->toBeNull()
+    expect(Tenant::find($doomed->id))->toBeNull()
         ->and(Tenancy::central(fn () => Project::count()))->toBe(1)
         ->and(Storage::disk('local')->exists('tenants/'.$doomed->id.'/f.txt'))->toBeFalse()
         ->and(Storage::disk('local')->exists('tenants/'.$kept->id.'/f.txt'))->toBeTrue()

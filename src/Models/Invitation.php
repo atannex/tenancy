@@ -16,6 +16,8 @@ use Illuminate\Support\Carbon;
  * @property string $email
  * @property string $role
  * @property string $token_hash
+ * @property string|null $invited_by
+ * @property string|null $accepted_by
  * @property Carbon $expires_at
  * @property Carbon|null $accepted_at
  * @property Carbon|null $revoked_at

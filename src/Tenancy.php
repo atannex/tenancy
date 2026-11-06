@@ -161,7 +161,11 @@ final class Tenancy
         $this->unwindTo(0);
     }
 
-    /** By exact key first, then by slug. */
+    /**
+     * By exact key first, then by slug.
+     *
+     * @return (Tenant&Model)|null
+     */
     public function find(string $keyOrSlug): ?Tenant
     {
         if ($keyOrSlug === '') {
@@ -172,18 +176,20 @@ final class Tenancy
         return $this->findByKey($keyOrSlug) ?? $this->query()->where('slug', strtolower($keyOrSlug))->first();
     }
 
+    /** @return (Tenant&Model)|null */
     public function findByKey(string $key): ?Tenant
     {
         /** @var (Model&Tenant)|null */
         return $key === '' ? null : $this->query()->whereKey($key)->first();
     }
 
+    /** @return Tenant&Model */
     public function findOrFail(string $keyOrSlug): Tenant
     {
         return $this->find($keyOrSlug) ?? throw TenantNotFound::forKey($keyOrSlug);
     }
 
-    /** @return Builder<Model> */
+    /** @return Builder<Model&Tenant> */
     public function query(): Builder
     {
         return $this->newModel()->newQuery();
@@ -214,13 +220,14 @@ final class Tenancy
         }, array_values((array) config('tenancy.bootstrappers', [])));
     }
 
+    /** @return Model&Tenant */
     private function newModel(): Model
     {
-        $class = $this->model();
+        $class = (string) config('tenancy.models.tenant');
         $model = new $class;
 
-        if (! $model instanceof Tenant) {
-            throw new InvalidArgumentException("[{$class}] must implement ".Tenant::class.'.');
+        if (! $model instanceof Model || ! $model instanceof Tenant) {
+            throw new InvalidArgumentException("[{$class}] must be an Eloquent model implementing ".Tenant::class.'.');
         }
 
         return $model;

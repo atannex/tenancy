@@ -20,7 +20,7 @@ final class ArchiveCommand extends Command
     {
         $grace = $this->option('grace');
         app(TenantLifecycle::class)->archive($tenant = $this->tenant(), $grace === null ? null : (int) $grace);
-        $this->components->info("Tenant [{$tenant->slug}] archived; purge after {$tenant->purge_after}.");
+        $this->components->info("Tenant [{$tenant->getTenantSlug()}] archived; purge after {$tenant->getAttribute('purge_after')}.");
 
         return self::SUCCESS;
     }

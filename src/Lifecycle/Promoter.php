@@ -22,6 +22,9 @@ use Throwable;
  * and migrated, rows copied table by table and counted, tier flipped,
  * maintenance off. The source is kept unless $deleteSource; on any failure
  * the target is removed and the tenant stays where it was.
+ *
+ * Moving into the shared tier keeps primary keys: tables with auto-increment
+ * keys are refused when an id is already taken there (see Rows).
  */
 final class Promoter
 {
@@ -110,33 +113,26 @@ final class Promoter
         $column = (string) config('tenancy.database.tenant_column', 'tenant_id');
 
         $target->transaction(function () use ($tenant, $source, $target, $tables, $key, $column, $intoShared): void {
+            // Rows a kept source left behind on an earlier move are a stale copy of this tenant's data.
+            if ($intoShared) {
+                foreach (array_reverse(array_keys($tables)) as $table) {
+                    $target->getSchemaBuilder()->hasColumn($table, $column) && $target->table($table)->where($column, $key)->delete();
+                }
+            }
+
             foreach ($tables as $table => $filter) {
                 if (! $target->getSchemaBuilder()->hasTable($table)) {
                     throw new RuntimeException("Table [{$table}] is missing on the target; add it to the tenant migrations.");
                 }
 
-                $query = $source->table($table);
-                $filter && $query->where($filter, $key);
-                $first = $source->getSchemaBuilder()->getColumnListing($table)[0];
-                $batch = [];
-                $copied = 0;
+                $rows = (function () use ($source, $table, $filter, $key, $column) {
+                    foreach (Rows::read($source, $table, $filter, $key) as $row) {
+                        array_key_exists($column, $row) && $row[$column] = $key;
 
-                foreach ($query->orderBy($first)->cursor() as $row) {
-                    $row = (array) $row;
-                    array_key_exists($column, $row) && $row[$column] = $key;
-                    $batch[] = $row;
-
-                    if (count($batch) === 500) {
-                        $target->table($table)->insert($batch);
-                        $copied += 500;
-                        $batch = [];
+                        yield $row;
                     }
-                }
-
-                if ($batch !== []) {
-                    $target->table($table)->insert($batch);
-                    $copied += count($batch);
-                }
+                })();
+                $copied = Rows::write($target, $table, $rows, $intoShared);
 
                 $landed = $target->table($table);
                 $intoShared && $target->getSchemaBuilder()->hasColumn($table, $column) && $landed->where($column, $key);

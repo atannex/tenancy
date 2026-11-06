@@ -6,6 +6,7 @@ use Atannex\Tenancy\Bootstrappers\CacheBootstrapper;
 use Atannex\Tenancy\Bootstrappers\DatabaseBootstrapper;
 use Atannex\Tenancy\Bootstrappers\FilesystemBootstrapper;
 use Atannex\Tenancy\Bootstrappers\LogBootstrapper;
+use Atannex\Tenancy\Bootstrappers\UrlBootstrapper;
 use Atannex\Tenancy\Domains\NullCertificateIssuer;
 use Atannex\Tenancy\Domains\PhpDnsResolver;
 use Atannex\Tenancy\Identification\DomainResolver;
@@ -35,8 +36,6 @@ return [
         // The connection that holds the tenants table. Null = the app's default connection at boot.
         'central_connection' => env('TENANCY_CENTRAL_CONNECTION'),
         'tenant_column' => 'tenant_id',
-        // ulid | uuid | int — the type $table->tenant() creates.
-        'key_type' => 'ulid',
         // Dedicated tiers: the connection whose server/credentials tenant databases are created on
         // (null = the central connection), the name tenants connect under, and database names.
         'template_connection' => env('TENANCY_TEMPLATE_CONNECTION'),
@@ -56,8 +55,11 @@ return [
             'sqlite' => SqliteDatabaseManager::class,
             'sqlsrv' => SqlServerDatabaseManager::class,
         ],
-        // Load the package migrations directly. Set false once you publish them (tenancy:install).
+        // Load the package migrations directly. Any you publish (tenancy:install) replace their package copy.
         'load_migrations' => true,
+        // Point database-backed queues, cache stores, sessions and job batches that have no
+        // connection of their own at the central connection, so dedicated tenants never swallow them.
+        'pin_infrastructure' => true,
     ],
 
     // Fail closed: touching tenant models with no tenant (and outside Tenancy::central()) throws.
@@ -82,6 +84,9 @@ return [
 
         'header' => 'X-Tenant',
         'path_parameter' => 'tenant',
+        // Fill {tenant} in route() wherever a tenant is in context (jobs, mail, commands).
+        // Null = when 'path' is in resolvers; requests identified by path always get it.
+        'path_defaults' => null,
 
         // Refuse suspended, archived and not-yet-active tenants in the `tenant` middleware.
         'require_active' => true,
@@ -90,17 +95,21 @@ return [
             'enabled' => true,
             'store' => null,
             'ttl' => 3600,
+            // Unknown hosts are remembered as misses for this many seconds (0 = off).
+            'miss_ttl' => 60,
         ],
     ],
 
     // Classes implementing Atannex\Tenancy\Contracts\Bootstrapper, run in order on entering a tenant.
-    // Also available: RedisBootstrapper, SessionBootstrapper, UrlBootstrapper,
+    // Also available: RedisBootstrapper, SessionBootstrapper,
     // ConfigBootstrapper, MailBootstrapper, ScoutBootstrapper.
     'bootstrappers' => [
         DatabaseBootstrapper::class,
         CacheBootstrapper::class,
         FilesystemBootstrapper::class,
         LogBootstrapper::class,
+        // Links built in jobs, mail and commands point at the tenant's host.
+        UrlBootstrapper::class,
     ],
 
     'cache' => [
@@ -109,8 +118,9 @@ return [
     ],
 
     'redis' => [
-        // Connections prefixed per tenant. Never list the queue's connection.
-        'connections' => ['default'],
+        // Connections RedisBootstrapper prefixes per tenant. Never list the queue's connection
+        // (Laravel's Redis queue uses "default"), or jobs land where no worker looks.
+        'connections' => [],
     ],
 
     'filesystem' => [
@@ -122,6 +132,9 @@ return [
 
     'url' => [
         'scheme' => 'https',
+        // UrlBootstrapper leaves requests on the host they arrived on;
+        // true roots links at the tenant's primary domain inside requests too.
+        'requests' => false,
     ],
 
     // ConfigBootstrapper: config key => tenant path (data_get, or "settings.x").
@@ -137,6 +150,9 @@ return [
     'queue' => [
         // Run jobs of suspended/archived tenants anyway (default: the job fails).
         'run_inactive' => false,
+        // Seconds before a job held during tenants:promote or maintenance (hold_jobs) is tried again.
+        // Holding does not spend one of the job's attempts on the database, Redis and SQS queues.
+        'hold_delay' => 30,
     ],
 
     // End tenancy after each request (and each Octane request) so no state leaks.
@@ -166,6 +182,11 @@ return [
         'schedule' => true,
         // Where the shared tier's tenant models live (null = tenancy.audit.paths).
         'model_paths' => null,
+        // tenants:import refuses zips beyond these (guards against zip bombs).
+        'import' => [
+            'max_entries' => 100_000,
+            'max_bytes' => 2 * 1024 ** 3,
+        ],
     ],
 
     'domains' => [
@@ -175,6 +196,8 @@ return [
         'claim_ttl_days' => 7,
         'verify_delays' => [60, 300, 900, 3600, 21600, 86400],
         'redirect_aliases' => true,
+        // 301 is cached by browsers for good; use 302 while hosts are still moving.
+        'alias_redirect_status' => 301,
         'dns_resolver' => PhpDnsResolver::class,
         'certificate_issuer' => NullCertificateIssuer::class,
         // On-demand TLS ask endpoint (GET {path}?domain=host).
@@ -205,4 +228,25 @@ return [
         'ignore_tables' => ['tenants', 'tenant_domains'],
     ],
 
+    'integrations' => [
+        // Livewire (when installed): updates re-run the page's tenancy middleware,
+        // and temporary uploads live on a central copy of the upload disk.
+        'livewire' => [
+            'enabled' => true,
+            'persistent_middleware' => true,
+            'central_uploads' => true,
+            // Extra middleware for Livewire's update route, e.g. ['web', 'tenant.optional']. Null = leave it.
+            'update_middleware' => null,
+        ],
+
+        // Sanctum tokens tied to a tenant: publish tenancy-sanctum-migrations, then use
+        // $user->createTenantToken() and the tenant.token middleware.
+        'sanctum' => [
+            'enabled' => false,
+            'model' => null,
+            'column' => 'tenant_id',
+            // Let tokens tied to no tenant work inside tenants.
+            'global_tokens' => false,
+        ],
+    ],
 ];

@@ -18,6 +18,7 @@ use Illuminate\Support\Carbon;
  * @property string $user_id
  * @property string $role
  * @property MembershipStatus $status
+ * @property string|null $invited_by
  * @property Carbon|null $joined_at
  */
 class Membership extends Model

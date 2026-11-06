@@ -74,6 +74,12 @@ final class DoctorCommand extends Command
             return $missing === [] ? "{$count} reachable" : throw new \RuntimeException('missing for '.implode(', ', $missing));
         });
 
+        $this->check('Infrastructure connections', function () {
+            $loose = self::unpinnedInfrastructure();
+
+            return $loose === [] ? 'central' : throw new \RuntimeException(implode(', ', $loose).' follow the default connection, which dedicated tenants switch; set their connection or tenancy.database.pin_infrastructure');
+        });
+
         $unverified = Domain::query()->whereNull('verified_at')->count();
         $this->warnUnless('Custom domains', $unverified === 0, 'all verified', "{$unverified} waiting for DNS verification");
 
@@ -84,6 +90,34 @@ final class DoctorCommand extends Command
         });
 
         return $this->failed ? self::FAILURE : self::SUCCESS;
+    }
+
+    /**
+     * Database-backed queues, cache stores and sessions with no connection of their own.
+     *
+     * @return list<string>
+     */
+    public static function unpinnedInfrastructure(): array
+    {
+        $loose = [];
+
+        foreach ((array) config('queue.connections', []) as $name => $queue) {
+            if (is_array($queue) && ($queue['driver'] ?? null) === 'database' && empty($queue['connection'])) {
+                $loose[] = "queue.connections.{$name}";
+            }
+        }
+
+        foreach ((array) config('cache.stores', []) as $name => $store) {
+            if (is_array($store) && ($store['driver'] ?? null) === 'database' && empty($store['connection'])) {
+                $loose[] = "cache.stores.{$name}";
+            }
+        }
+
+        if (config('session.driver') === 'database' && empty(config('session.connection'))) {
+            $loose[] = 'session.connection';
+        }
+
+        return $loose;
     }
 
     /** @param \Closure(): string $probe */

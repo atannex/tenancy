@@ -20,14 +20,14 @@ final class SeedCommand extends Command
 
     public function __construct()
     {
-        $this->signature = 'tenants:seed {--class= : The seeder class (default: tenancy.migrations.seeder or Database\\Seeders\\TenantSeeder)} '.$this->tenantOptions();
+        $this->signature = 'tenants:seed {--class= : The seeder class (default: tenancy.provisioning.seeder or Database\\Seeders\\TenantSeeder)} '.$this->tenantOptions();
 
         parent::__construct();
     }
 
     public function handle(Tenancy $tenancy, TenantDatabase $database): int
     {
-        $class = $this->option('class') ?: config('tenancy.migrations.seeder', 'Database\\Seeders\\TenantSeeder');
+        $class = $this->option('class') ?: (config('tenancy.provisioning.seeder') ?: 'Database\\Seeders\\TenantSeeder');
         $failures = 0;
 
         $this->eachTenant(function ($tenant) use ($class, $tenancy, $database, &$failures): void {

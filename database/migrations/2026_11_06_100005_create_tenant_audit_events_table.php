@@ -27,7 +27,7 @@ return new class extends Migration
             $table->string('ip', 45)->nullable();
             $table->string('user_agent', 512)->nullable();
             $table->json('metadata')->nullable();
-            $table->timestamp('created_at')->index();
+            $table->dateTime('created_at')->index();
         });
     }
 

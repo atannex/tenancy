@@ -21,7 +21,7 @@ final class Presenter
             'status' => $tenant->tenantStatus()->value,
             'isolation' => $tenant->isolationTier()->value,
             'plan' => $tenant->getAttribute('plan'),
-            'domains' => method_exists($tenant, 'domains') ? $tenant->domains()->get()->map(self::domain(...))->all() : [],
+            'domains' => $tenant->domains()->get()->map(self::domain(...))->all(),
             'trial_ends_at' => $tenant->getAttribute('trial_ends_at')?->toIso8601String(),
             'suspended_at' => $tenant->getAttribute('suspended_at')?->toIso8601String(),
             'archived_at' => $tenant->getAttribute('archived_at')?->toIso8601String(),

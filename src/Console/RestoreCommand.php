@@ -19,7 +19,7 @@ final class RestoreCommand extends Command
     public function handle(): int
     {
         app(TenantLifecycle::class)->restore($tenant = $this->tenant());
-        $this->components->info("Tenant [{$tenant->slug}] restored.");
+        $this->components->info("Tenant [{$tenant->getTenantSlug()}] restored.");
 
         return self::SUCCESS;
     }

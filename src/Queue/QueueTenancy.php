@@ -10,14 +10,18 @@ use Atannex\Tenancy\Http\AccessGuard;
 use Atannex\Tenancy\Lifecycle\Maintenance;
 use Atannex\Tenancy\Tenancy;
 use Illuminate\Broadcasting\BroadcastEvent;
+use Illuminate\Contracts\Queue\Job;
 use Illuminate\Events\CallQueuedListener;
 use Illuminate\Mail\SendQueuedMailable;
 use Illuminate\Notifications\SendQueuedNotifications;
+use Illuminate\Queue\DatabaseQueue;
 use Illuminate\Queue\Events\JobExceptionOccurred;
 use Illuminate\Queue\Events\JobFailed;
 use Illuminate\Queue\Events\JobProcessed;
 use Illuminate\Queue\Events\JobProcessing;
 use Illuminate\Queue\Queue;
+use Illuminate\Queue\RedisQueue;
+use Illuminate\Queue\SqsQueue;
 use ReflectionClass;
 
 /**
@@ -99,8 +103,7 @@ final class QueueTenancy
 
         // Data is moving (tenants:promote): put the job back for later, untouched.
         if (app(Maintenance::class)->holdsJobs($tenant)) {
-            $event->job->release((int) config('tenancy.queue.hold_delay', 30));
-            $event->job->delete();
+            $this->hold($event->job);
 
             return;
         }
@@ -110,6 +113,35 @@ final class QueueTenancy
         }
 
         $this->tenancy->initialize($tenant);
+    }
+
+    /**
+     * Put a held job back without spending one of its attempts, so a worker
+     * with --tries=1 doesn't fail it once the tenant is back. The database,
+     * Redis and standard SQS queues get a fresh copy; other drivers (and SQS
+     * FIFO, which allows no per-message delay) fall back to release(), which
+     * counts the attempt.
+     */
+    private function hold(Job $job): void
+    {
+        $delay = max(0, (int) config('tenancy.queue.hold_delay', 30));
+        $queue = app('queue')->connection($job->getConnectionName());
+        $name = $job->getQueue();
+        $payload = $job->getRawBody();
+
+        $requeued = true;
+
+        match (true) {
+            // The reserved row counts this attempt already; store the count from before it.
+            $queue instanceof DatabaseQueue => (fn () => $this->pushToDatabase($name, $payload, $delay, max(0, $job->attempts() - 1)))->call($queue),
+            // The raw body is the payload as pushed, before this attempt was counted.
+            $queue instanceof RedisQueue => (fn () => $this->laterRaw($delay, $payload, $name))->call($queue),
+            $queue instanceof SqsQueue && ! str_ends_with((string) $name, '.fifo') => $queue->pushRaw($payload, $name, ['DelaySeconds' => min($delay, 900)]),
+            default => $requeued = false,
+        };
+
+        // release() puts this same job back (Beanstalkd keeps its id), so only a copy allows deleting it.
+        $requeued ? $job->delete() : $job->release($delay);
     }
 
     private function isSync(string $connection): bool

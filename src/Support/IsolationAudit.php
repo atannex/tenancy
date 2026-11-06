@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Atannex\Tenancy\Support;
 
 use Atannex\Tenancy\Database\BelongsToTenant;
+use Atannex\Tenancy\Lifecycle\TenantTables;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Schema\Builder;
 use Illuminate\Support\Facades\Schema;
@@ -40,7 +41,7 @@ final class IsolationAudit
             $prefix = $schema->getConnection()->getTablePrefix();
             $tables = array_map(
                 fn (string $table) => $prefix !== '' && str_starts_with($table, $prefix) ? substr($table, strlen($prefix)) : $table,
-                $schema->getTableListing(schemaQualified: false),
+                TenantTables::listing($schema),
             );
 
             foreach ($tables as $table) {
@@ -78,7 +79,7 @@ final class IsolationAudit
                 : [];
         }
 
-        /** @var Model&BelongsToTenant $model */
+        // $model uses BelongsToTenant (checked above).
         $column = $model->getTenantColumn();
 
         if (! $schema->hasColumn($table, $column)) {

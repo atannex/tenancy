@@ -15,13 +15,13 @@ final class FreshCommand extends Command
 
     public function __construct()
     {
-        $this->signature = 'tenants:fresh {--seed} {--queue} '.$this->tenantOptions();
+        $this->signature = 'tenants:fresh {--seed : Run the tenant seeder in each tenant afterwards} {--queue} '.$this->tenantOptions();
 
         parent::__construct();
     }
 
     public function handle(): int
     {
-        return $this->runEverywhere('migrate:fresh', $this->pathParameters() + array_filter(['--seed' => $this->option('seed')]), central: false);
+        return $this->runEverywhere('migrate:fresh', $this->pathParameters(), central: false, seed: (bool) $this->option('seed'));
     }
 }

@@ -146,12 +146,34 @@ final class TenantDatabase
         }
     }
 
+    /** On the schema tier, never reach the schema the central connection uses. */
+    private function assertNotCentralSchema(string $schema): void
+    {
+        $central = config('database.connections.'.app(Tenancy::class)->centralConnection());
+        $protected = array_filter([$central['search_path'] ?? null, $central['schema'] ?? null, 'public']);
+
+        foreach ($protected as $path) {
+            if (in_array($schema, array_map('trim', explode(',', (string) $path)), true)) {
+                throw new InvalidArgumentException("Refusing to connect to schema [{$schema}]: it is a central schema.");
+            }
+        }
+    }
+
     /** Register (and reset) a named connection pointing at the tenant's database. */
     public function connect(Tenant $tenant, ?string $connection = null, ?IsolationTier $tier = null): string
     {
         $connection ??= $this->connectionName();
+        $tier ??= $tenant->isolationTier();
+        $config = $this->config($tenant, $tier);
 
-        config(["database.connections.{$connection}" => $this->config($tenant, $tier)]);
+        // A tampered `connection` attribute must not point a tenant at the central data.
+        if ($tier === IsolationTier::Schema) {
+            $this->assertNotCentralSchema((string) ($config['schema'] ?? ''));
+        } else {
+            $this->assertNotCentral((string) ($config['database'] ?? ''));
+        }
+
+        config(["database.connections.{$connection}" => $config]);
         DB::purge($connection);
 
         return $connection;

@@ -85,7 +85,9 @@ it('refuses the schema tier on non-postgres servers', function () {
 })->throws(InvalidArgumentException::class, 'PostgreSQL');
 
 it('uses per-tenant server overrides', function () {
-    $this->a->update(['connection' => ['host' => 'db-7.internal', 'password' => 'p']]);
+    $this->a->forceFill(['connection' => ['host' => 'db-7.internal', 'password' => 'p']])->save();
 
     expect($this->db->config($this->a->fresh()))->toMatchArray(['host' => 'db-7.internal', 'password' => 'p']);
+
+    $this->a->forceFill(['connection' => null])->save();
 });

@@ -17,7 +17,7 @@ final class CreatePrimaryDomain implements ProvisioningStep
 
     public function handle(Tenant $tenant, array $options): void
     {
-        if (empty($options['domain']) || ! method_exists($tenant, 'domains')) {
+        if (empty($options['domain'])) {
             return;
         }
 
@@ -30,7 +30,7 @@ final class CreatePrimaryDomain implements ProvisioningStep
 
     public function rollback(Tenant $tenant, array $options): void
     {
-        if (! empty($options['domain']) && method_exists($tenant, 'domains')) {
+        if (! empty($options['domain'])) {
             $tenant->domains()->where('host', Hosts::normalize((string) $options['domain']))->delete();
         }
     }

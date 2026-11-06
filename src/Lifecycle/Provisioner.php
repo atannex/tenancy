@@ -39,11 +39,16 @@ class Provisioner
     {
         $model = $this->tenancy->model();
 
+        // Tier, connection overrides and trial are set on purpose here; status and
+        // lifecycle dates always start fresh. Everything else goes through $fillable.
+        $explicit = array_intersect_key($attributes, array_flip(['id', 'isolation', 'connection', 'trial_ends_at']));
+        $fillable = array_diff_key($attributes, $explicit, array_flip(['status', 'suspended_at', 'archived_at', 'purge_after']));
+
         /** @var Tenant&Model $tenant */
-        $tenant = $this->tenancy->central(fn () => $model::create($attributes + [
+        $tenant = $this->tenancy->central(fn () => tap((new $model)->fill($fillable)->forceFill($explicit + [
             'status' => TenantStatus::Pending,
             'isolation' => IsolationTier::from((string) config('tenancy.database.default_tier', 'shared')),
-        ]));
+        ]))->save());
 
         event(new TenantCreated($tenant));
         $this->remember($tenant, $options);

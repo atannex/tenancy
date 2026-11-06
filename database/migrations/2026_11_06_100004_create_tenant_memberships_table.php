@@ -36,7 +36,7 @@ return new class extends Migration
             $table->string('token_hash', 64)->unique();
             $table->string('invited_by', 64)->nullable();
             $table->string('accepted_by', 64)->nullable();
-            $table->timestamp('expires_at');
+            $table->dateTime('expires_at');
             $table->timestamp('accepted_at')->nullable();
             $table->timestamp('revoked_at')->nullable();
             $table->timestamps();
@@ -49,7 +49,7 @@ return new class extends Migration
             $table->string('impersonator_id', 64);
             $table->string('user_id', 64);
             $table->string('token_hash', 64)->unique();
-            $table->timestamp('expires_at');
+            $table->dateTime('expires_at');
             $table->timestamp('used_at')->nullable();
             $table->timestamp('ended_at')->nullable();
             $table->string('ip', 45)->nullable();

@@ -59,7 +59,8 @@ class InitializeTenancy
 
         if ($host = $request->attributes->get('tenancy.host')) {
             if (config('tenancy.domains.redirect_aliases', true) && $target = AliasRedirect::target($host)) {
-                return new RedirectResponse(str_replace('://'.$request->getHttpHost(), '://'.$target, $request->fullUrl()), 301);
+                // 301 is cached by browsers for good; use 302 while you are still moving domains around.
+                return new RedirectResponse(str_replace('://'.$request->getHttpHost(), '://'.$target, $request->fullUrl()), (int) config('tenancy.domains.alias_redirect_status', 301));
             }
         }
 

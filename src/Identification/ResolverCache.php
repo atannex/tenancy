@@ -9,11 +9,17 @@ use Closure;
 use Illuminate\Contracts\Cache\Store;
 
 /**
- * Host/slug → tenant key. Only hits are cached, so a new domain works at once;
- * model events forget keys when domains or slugs change.
+ * Host/slug → tenant key. Hits are cached for tenancy.identification.cache.ttl
+ * seconds; misses for miss_ttl seconds (default 60, 0 = never), so a flood of
+ * unknown hosts costs one query per host per minute. Model events forget the
+ * keys (both kinds) when tenants, slugs or domains change, so a new domain
+ * works at once.
  */
 final class ResolverCache
 {
+    /** Stored for a miss; never a valid tenant key. */
+    private const string MISS = "\0tenancy:miss";
+
     public static function domainKey(string $host): string
     {
         return 'tenancy:domain:'.Hosts::normalize($host);
@@ -33,6 +39,10 @@ final class ResolverCache
 
         $cached = $this->store()->get($key);
 
+        if ($cached === self::MISS) {
+            return null;
+        }
+
         if (is_string($cached)) {
             return $cached;
         }
@@ -41,6 +51,8 @@ final class ResolverCache
 
         if ($value !== null) {
             $this->store()->put($key, $value, (int) config('tenancy.identification.cache.ttl', 3600));
+        } elseif (($missTtl = (int) config('tenancy.identification.cache.miss_ttl', 60)) > 0) {
+            $this->store()->put($key, self::MISS, $missTtl);
         }
 
         return $value;

@@ -29,7 +29,7 @@ final class Domains
     public function add(Tenant $tenant, string $host, DomainType $type = DomainType::Alias, bool $verified = false): Domain
     {
         /** @var Domain $domain */
-        $domain = $tenant->domains()->create([
+        $domain = $tenant->domains()->forceCreate([
             'host' => $host,
             'type' => $type,
             'verification_token' => Str::random(40),
@@ -93,8 +93,26 @@ final class Domains
             return false;
         }
 
-        $domain->update(['verified_at' => now()]);
-        $this->dropRivalClaims($domain);
+        // Serialize claims on the host: two tenants whose tokens are both in DNS can't both win.
+        $won = DB::connection($domain->getConnectionName())->transaction(function () use ($domain): bool {
+            Domain::query()->where('host', $domain->host)->lockForUpdate()->get();
+
+            if (Domain::verifiedElsewhere($domain->host, $domain->getKey())) {
+                return false;
+            }
+
+            $domain->forceFill(['verified_at' => now()])->save();
+            $this->dropRivalClaims($domain);
+
+            return true;
+        });
+
+        if (! $won) {
+            event(new DomainVerificationFailed($tenant, $domain, "{$domain->host} is already verified by another tenant."));
+
+            return false;
+        }
+
         event(new DomainVerified($tenant, $domain));
         $this->issue($tenant, $domain);
 

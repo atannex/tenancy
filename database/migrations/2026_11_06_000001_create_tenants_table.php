@@ -29,7 +29,6 @@ return new class extends Migration
             $table->timestamp('archived_at')->nullable();
             $table->timestamp('purge_after')->nullable();
             $table->timestamps();
-            $table->softDeletes();
         });
     }
 

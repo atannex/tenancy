@@ -19,7 +19,7 @@ final class UpCommand extends Command
     public function handle(): int
     {
         app(Maintenance::class)->up($tenant = $this->tenant());
-        $this->components->info("Tenant [{$tenant->slug}] is up.");
+        $this->components->info("Tenant [{$tenant->getTenantSlug()}] is up.");
 
         return self::SUCCESS;
     }

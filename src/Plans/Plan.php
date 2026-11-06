@@ -21,7 +21,7 @@ final readonly class Plan
         public array $limits = [],
     ) {}
 
-    /** @param array{name?: string, features?: list<string>, limits?: array<string, mixed>} $definition */
+    /** @param array{name?: string, features?: array<array-key, string>, limits?: array<string, mixed>} $definition */
     public static function fromArray(string $key, array $definition): self
     {
         return new self($key, (string) ($definition['name'] ?? ucfirst($key)), array_values($definition['features'] ?? []), $definition['limits'] ?? []);

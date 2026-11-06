@@ -37,7 +37,11 @@ final class DatabaseBootstrapper implements Bootstrapper
             return;
         }
 
-        $this->connection = $this->database->connect($tenant, self::connectionFor($tenant));
+        $name = self::connectionFor($tenant);
+
+        // Coming back into a tenant whose transaction is still open (a central()
+        // or nested run() inside DB::transaction()): keep that connection.
+        $this->connection = $this->inTransaction($name) ? $name : $this->database->connect($tenant, $name);
         $this->database->connect($tenant);
         $this->default = DB::getDefaultConnection();
         DB::setDefaultConnection($this->connection);
@@ -51,9 +55,21 @@ final class DatabaseBootstrapper implements Bootstrapper
 
         $alias = $this->database->connectionName();
         DB::purge($alias);
-        DB::purge((string) $this->connection);
         config(["database.connections.{$alias}" => null]);
+
+        // Close the tenant's connection, unless a transaction on it is still open
+        // (purging would silently drop it). Its config stays registered: models
+        // loaded in this tenant keep saving to its database.
+        if (! $this->inTransaction((string) $this->connection)) {
+            DB::purge((string) $this->connection);
+        }
+
         DB::setDefaultConnection($this->default);
         $this->default = $this->connection = null;
+    }
+
+    private function inTransaction(string $name): bool
+    {
+        return array_key_exists($name, DB::getConnections()) && DB::connection($name)->transactionLevel() > 0;
     }
 }

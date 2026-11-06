@@ -82,8 +82,9 @@ final class Impersonations
 
         $record->refresh();
 
-        $this->guard()->login($user);
+        // Remember the record before logging in: login fires Authenticated, which enforce() checks.
         app('session')->put(self::SESSION_KEY, $record->getKey());
+        $this->guard()->login($user);
 
         event(new ImpersonationStarted($tenant, $record));
 
@@ -104,6 +105,38 @@ final class Impersonations
         return $this->current() !== null;
     }
 
+    /**
+     * End an impersonation that has outlived its session TTL, or that is
+     * being used in a tenant other than the one it was issued for (a shared
+     * session cookie across tenants). Runs when the session user is loaded
+     * and whenever a tenant is initialized.
+     */
+    public function enforce(?Tenant $entering = null): void
+    {
+        if (! app()->bound('session') || ! app('session')->isStarted() || ! app('session')->has(self::SESSION_KEY)) {
+            return;
+        }
+
+        $record = $this->current();
+
+        if ($record === null) {
+            // Ended elsewhere (another device, the audit UI): drop the stale login too.
+            $this->logout();
+
+            return;
+        }
+
+        // TenancyInitialized passes the tenant being entered: it is not current() yet.
+        $tenant = $entering ?? app(Tenancy::class)->current();
+        $ttl = config('tenancy.people.impersonation.session_ttl', 120);
+        $expired = $ttl !== null && $record->used_at !== null && $record->used_at->copy()->addMinutes((int) $ttl)->isPast();
+        $elsewhere = $tenant !== null && $tenant->getTenantKey() !== $record->tenant_id;
+
+        if ($expired || $elsewhere) {
+            $this->stop();
+        }
+    }
+
     public function stop(): void
     {
         $record = $this->current();
@@ -113,17 +146,33 @@ final class Impersonations
         }
 
         $record->update(['ended_at' => now()]);
-        $this->guard()->logout();
-        app('session')->forget(self::SESSION_KEY);
+        $this->logout();
 
         if ($tenant = app(Tenancy::class)->findByKey($record->tenant_id)) {
             event(new ImpersonationEnded($tenant, $record));
         }
     }
 
-    /** @return StatefulGuard */
-    private function guard(): mixed
+    private function logout(): void
     {
-        return auth()->guard(config('tenancy.people.impersonation.guard'));
+        // Forget the key first: logout() loads the user, which would run enforce() again.
+        app('session')->forget(self::SESSION_KEY);
+        $this->guard()->logout();
+    }
+
+    private function guard(): StatefulGuard
+    {
+        $name = config('tenancy.people.impersonation.guard');
+        $guard = auth()->guard($name);
+
+        if (! $guard instanceof StatefulGuard) {
+            throw new \LogicException(sprintf(
+                'Impersonation needs a session (stateful) guard; tenancy.people.impersonation.guard "%s" is a %s.',
+                $name ?? config('auth.defaults.guard'),
+                $guard::class,
+            ));
+        }
+
+        return $guard;
     }
 }

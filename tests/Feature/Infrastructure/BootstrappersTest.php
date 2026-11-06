@@ -146,7 +146,7 @@ it('prefixes redis keys per tenant', function () {
         $this->markTestSkipped('No Redis server.');
     }
 
-    config(['tenancy.bootstrappers' => [RedisBootstrapper::class]]);
+    config(['tenancy.bootstrappers' => [RedisBootstrapper::class], 'tenancy.redis.connections' => ['default']]);
     Tenancy::run($this->a, fn () => Redis::set('atx-tenancy-test', 'alpha'));
 
     expect(Redis::get('atx-tenancy-test'))->toBeNull()

@@ -24,7 +24,7 @@ class TenantFactory extends Factory
 
     public function withDomain(string $host, DomainType $type = DomainType::Primary): static
     {
-        return $this->afterCreating(fn (Tenant $tenant) => $tenant->domains()->create(['host' => $host, 'type' => $type, 'verified_at' => now()]));
+        return $this->afterCreating(fn (Tenant $tenant) => $tenant->domains()->forceCreate(['host' => $host, 'type' => $type, 'verified_at' => now()]));
     }
 
     public function suspended(): static

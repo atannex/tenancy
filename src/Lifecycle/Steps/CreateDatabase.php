@@ -27,7 +27,11 @@ final class CreateDatabase implements ProvisioningStep
     /** Drops the database only if this step created it. */
     public function rollback(Tenant $tenant, array $options): void
     {
-        $data = $tenant instanceof Model ? (array) ($tenant->getAttribute('data') ?? []) : [];
+        if (! $tenant instanceof Model) {
+            return;
+        }
+
+        $data = (array) ($tenant->getAttribute('data') ?? []);
 
         if ($tenant->isolationTier() !== IsolationTier::Shared && ($data[self::FLAG] ?? false)) {
             $this->database->delete($tenant);

@@ -29,7 +29,14 @@ final class PostgresDatabaseManager extends ServerManager implements ManagesData
         $admin = $this->admin($server);
         $user = $this->identifier($username);
 
-        $admin->statement("CREATE ROLE \"{$user}\" LOGIN PASSWORD '{$this->password($password)}'");
+        $secret = $this->password($password);
+
+        // A retry after a half-finished create finds the role and sets the new password.
+        if ($admin->selectOne('SELECT 1 FROM pg_roles WHERE rolname = ?', [$user]) === null) {
+            $admin->statement("CREATE ROLE \"{$user}\" LOGIN");
+        }
+
+        $this->secretStatement($admin, "ALTER ROLE \"{$user}\" LOGIN PASSWORD '{$secret}'", $password);
         $admin->statement("GRANT ALL PRIVILEGES ON DATABASE \"{$this->identifier($database)}\" TO \"{$user}\"");
         $admin->statement("ALTER DATABASE \"{$this->identifier($database)}\" OWNER TO \"{$user}\"");
     }

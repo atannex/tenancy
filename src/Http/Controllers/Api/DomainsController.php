@@ -6,6 +6,7 @@ namespace Atannex\Tenancy\Http\Controllers\Api;
 
 use Atannex\Tenancy\Domains\Domains;
 use Atannex\Tenancy\Enums\DomainType;
+use Atannex\Tenancy\Identification\Hosts;
 use Atannex\Tenancy\Models\Domain;
 use Atannex\Tenancy\Tenancy;
 use Illuminate\Http\JsonResponse;
@@ -23,8 +24,14 @@ final class DomainsController
 
     public function store(Request $request, string $tenant): JsonResponse
     {
+        $request->merge(['host' => is_string($request->input('host')) ? Hosts::normalize($request->input('host')) : $request->input('host')]);
         $data = $request->validate([
             'host' => ['required', 'string', 'max:253',
+                function (string $attribute, mixed $value, \Closure $fail): void {
+                    if (! Hosts::isValid((string) $value)) {
+                        $fail('The host must be a valid domain name, like app.example.com.');
+                    }
+                },
                 Rule::unique(Domain::class, 'host')->whereNotNull('verified_at'),
                 Rule::unique(Domain::class, 'host')->where('tenant_id', $this->tenancy->findOrFail($tenant)->getTenantKey()),
             ],

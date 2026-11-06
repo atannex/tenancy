@@ -8,6 +8,8 @@ use Atannex\Tenancy\Contracts\DatabaseManager;
 use Illuminate\Database\Connection;
 use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
+use RuntimeException;
+use Throwable;
 
 /** Shared plumbing: an admin connection to the server, and safe identifiers. */
 abstract class ServerManager implements DatabaseManager
@@ -35,6 +37,23 @@ abstract class ServerManager implements DatabaseManager
         }
 
         return $name;
+    }
+
+    /**
+     * Run a statement that carries a password straight on PDO, so it never
+     * reaches query events, query logs or debug bars. A failure is rethrown
+     * with the password scrubbed and without the original exception, whose
+     * message holds the SQL text.
+     */
+    protected function secretStatement(Connection $admin, string $sql, string $password): void
+    {
+        try {
+            $admin->getPdo()->exec($sql);
+        } catch (Throwable $e) {
+            $message = str_replace($password, '********', $e->getMessage());
+
+            throw new RuntimeException('Could not set up the tenant database login: '.$message, (int) $e->getCode());
+        }
     }
 
     protected function password(string $password): string

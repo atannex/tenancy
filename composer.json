@@ -10,25 +10,35 @@
     ],
     "type": "library",
     "license": "MIT",
+    "homepage": "https://github.com/atannex/tenancy",
     "authors": [
         {
-            "name": "Atanga Leke Collins",
+            "name": "Atangageih Leke Collins",
             "email": "atangageihlekecollins@gmail.com"
         }
     ],
+    "support": {
+        "issues": "https://github.com/atannex/tenancy/issues",
+        "source": "https://github.com/atannex/tenancy"
+    },
     "require": {
         "php": "^8.3",
         "laravel/framework": "^12.0|^13.0"
     },
     "require-dev": {
+        "larastan/larastan": "^3.0",
         "laravel/pint": "^1.18",
+        "laravel/sanctum": "^4.0",
+        "livewire/livewire": "^3.6|^4.0",
         "orchestra/testbench": "^10.0|^11.0",
         "pestphp/pest": "^3.7|^4.0"
     },
     "suggest": {
         "ext-zip": "Tenant export and import (tenants:export, tenants:import).",
         "ext-redis": "RedisBootstrapper (per-tenant Redis prefixes need phpredis).",
+        "laravel/octane": "Tenancy resets between Octane requests automatically.",
         "laravel/sanctum": "Guards the optional management API (auth:sanctum).",
+        "laravel/scout": "ScoutBootstrapper prefixes search indexes per tenant.",
         "atannex/billing": "Moves tenants to the plan a payment paid for."
     },
     "autoload": {
@@ -60,7 +70,8 @@
         }
     },
     "scripts": {
-        "test": "pest"
+        "test": "pest",
+        "analyse": "phpstan analyse --memory-limit=1G"
     },
     "config": {
         "sort-packages": true,

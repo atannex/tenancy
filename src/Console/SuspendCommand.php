@@ -19,7 +19,7 @@ final class SuspendCommand extends Command
     public function handle(): int
     {
         app(TenantLifecycle::class)->suspend($tenant = $this->tenant(), $this->option('reason'));
-        $this->components->info("Tenant [{$tenant->slug}] suspended.");
+        $this->components->info("Tenant [{$tenant->getTenantSlug()}] suspended.");
 
         return self::SUCCESS;
     }

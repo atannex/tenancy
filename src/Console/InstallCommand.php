@@ -22,7 +22,7 @@ final class InstallCommand extends Command
         File::ensureDirectoryExists($folder);
         File::put($folder.'/.gitkeep', '');
 
-        $this->components->info('Tenancy installed. Set tenancy.database.load_migrations to false, run php artisan migrate, then add BelongsToTenant to tenant models.');
+        $this->components->info('Tenancy installed. Run php artisan migrate (published migrations replace the package copies), then add BelongsToTenant to tenant models.');
 
         return self::SUCCESS;
     }

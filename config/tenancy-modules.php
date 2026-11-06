@@ -75,7 +75,10 @@ return [
         ],
 
         'impersonation' => [
+            // Seconds an issued link stays redeemable.
             'ttl' => 60,
+            // Minutes an impersonation login lasts once redeemed (null = until logout).
+            'session_ttl' => 120,
             'allow_owners' => false,
             'guard' => null,
         ],
@@ -107,8 +110,14 @@ return [
 
     'billing' => [
         // Apply a plan when an atannex/billing payment succeeds with this metadata.
+        // The metadata must be set by your server when it starts the payment, never copied from input.
         'enabled' => true,
         'metadata' => ['tenant' => 'tenant', 'plan' => 'plan'],
+        // What each plan costs, in the payment's minor units: 'pro' => ['amount' => 5000, 'currency' => 'XAF'].
+        // A plan listed here is applied only when the payment covers it in that currency.
+        'prices' => [],
+        // Also require the payer's email (customer_email) to belong to an active member of the tenant.
+        'require_member' => false,
     ],
 
 ];

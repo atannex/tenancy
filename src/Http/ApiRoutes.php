@@ -15,7 +15,7 @@ final class ApiRoutes
     public static function register(Router $router): void
     {
         $router->prefix((string) config('tenancy.api.prefix', 'tenancy-api'))
-            ->middleware(array_merge((array) config('tenancy.api.middleware', []), [EnsureCentral::class]))
+            ->middleware(array_merge((array) config('tenancy.api.middleware', []), [EnsureCentral::class.':all']))
             ->name('tenancy.api.')
             ->group(function (Router $router): void {
                 $router->get('tenants', [TenantsController::class, 'index'])->name('tenants.index');

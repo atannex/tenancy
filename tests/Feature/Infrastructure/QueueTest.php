@@ -42,7 +42,7 @@ it('keeps central jobs central', function () {
 
 it('fails jobs of suspended tenants', function () {
     Tenancy::run($this->a, fn () => RecordTenantJob::dispatch());
-    $this->a->update(['status' => TenantStatus::Suspended]);
+    $this->a->forceFill(['status' => TenantStatus::Suspended])->save();
 
     work();
 
