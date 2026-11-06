@@ -118,7 +118,7 @@ final class TenantDatabase
         $server = array_merge($this->template(), array_intersect_key($overrides, array_flip(['host', 'port', 'unix_socket', 'sslmode'])));
 
         $this->assertNotCentral($this->name($tenant));
-        DB::purge($this->connectionName());
+        $this->disconnectFrom($this->name($tenant));
         $manager->delete($this->name($tenant), $server);
 
         if (config('tenancy.database.dedicated_users') && $manager instanceof ManagesDatabaseUsers && ! empty($overrides['username'])) {
@@ -127,6 +127,23 @@ final class TenantDatabase
             // The login is gone; a later create() must make a new one.
             if ($tenant instanceof Model) {
                 $tenant->forceFill(['connection' => array_diff_key($overrides, array_flip(['username', 'password']))])->saveQuietly();
+            }
+        }
+    }
+
+    /**
+     * Close this process's connections to a database about to be dropped
+     * (PostgreSQL refuses to drop a database with open sessions), and forget
+     * their configuration, which holds the tenant's credentials.
+     */
+    private function disconnectFrom(string $database): void
+    {
+        DB::purge($this->connectionName());
+
+        foreach ((array) config('database.connections', []) as $name => $config) {
+            if (is_array($config) && ($config['database'] ?? null) === $database) {
+                DB::purge((string) $name);
+                config(["database.connections.{$name}" => null]);
             }
         }
     }

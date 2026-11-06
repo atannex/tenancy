@@ -16,7 +16,11 @@ final class PostgresDatabaseManager extends ServerManager implements ManagesData
 
     public function delete(string $name, array $server): void
     {
-        $this->admin($server)->statement("DROP DATABASE IF EXISTS \"{$this->identifier($name)}\"");
+        $admin = $this->admin($server);
+        // PostgreSQL 13+ can end other processes' sessions (queue workers) instead of refusing.
+        $force = version_compare($admin->getServerVersion(), '13', '>=') ? ' WITH (FORCE)' : '';
+
+        $admin->statement("DROP DATABASE IF EXISTS \"{$this->identifier($name)}\"{$force}");
     }
 
     public function exists(string $name, array $server): bool

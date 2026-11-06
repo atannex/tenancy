@@ -81,6 +81,10 @@ it('rolls back, refreshes and reports status', function () {
 });
 
 it('refuses the schema tier on non-postgres servers', function () {
+    if (DB::connection()->getDriverName() === 'pgsql') {
+        $this->markTestSkipped('The central server is PostgreSQL.');
+    }
+
     $this->db->create(Tenant::factory()->create(['isolation' => IsolationTier::Schema]));
 })->throws(InvalidArgumentException::class, 'PostgreSQL');
 

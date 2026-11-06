@@ -152,9 +152,10 @@ final class Importer
     private function restore(ZipArchive $zip, Tenant&Model $tenant, array $tables, array $package): void
     {
         $this->tenancy->central(function () use ($zip, $tenant, $tables, $package): void {
-            $connection = $this->tables->connection($tenant);
             // Only the new tenant's own tables, each with its own tenant column.
+            // Listed before connecting: for() connects again, purging that connection.
             $allowed = $this->tables->for($tenant);
+            $connection = $this->tables->connection($tenant);
             $default = (string) config('tenancy.database.tenant_column', 'tenant_id');
             $shared = $tenant->isolationTier() === IsolationTier::Shared;
 

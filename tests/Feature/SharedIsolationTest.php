@@ -8,6 +8,7 @@ use Atannex\Tenancy\Facades\Tenancy;
 use Atannex\Tenancy\Models\Tenant;
 use Atannex\Tenancy\Tests\Fixtures\Models\Project;
 use Illuminate\Database\UniqueConstraintViolationException;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Route;
 
 beforeEach(function () {
@@ -77,7 +78,8 @@ it('requires a tenant_id when creating centrally', function () {
 
 it('enforces uniqueness per tenant, not globally', function () {
     expect($this->pa->slug)->toBe($this->pb->slug);
-    Tenancy::run($this->a, fn () => Project::create(['name' => 'dup', 'slug' => 'one']));
+    // In a savepoint: PostgreSQL aborts the surrounding test transaction on an error.
+    DB::transaction(fn () => Tenancy::run($this->a, fn () => Project::create(['name' => 'dup', 'slug' => 'one'])));
 })->throws(UniqueConstraintViolationException::class);
 
 it('route binding cannot reach another tenant', function () {

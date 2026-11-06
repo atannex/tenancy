@@ -58,10 +58,12 @@ final class Exporter
 
         try {
             $manifest = $this->tenancy->central(function () use ($tenant, $zip, &$temp): array {
+                // for() connects again (purging that connection), so list the tables first.
+                $tables = $this->tables->for($tenant);
                 $connection = $this->tables->connection($tenant);
                 $counts = [];
 
-                foreach ($this->tables->for($tenant) as $table => $column) {
+                foreach ($tables as $table => $column) {
                     $counts[$table] = $this->addTable($zip, "tables/{$table}.jsonl", $connection, $table, $column, $tenant, $temp);
                 }
 
