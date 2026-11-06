@@ -59,6 +59,10 @@ final class TenancyServiceProvider extends ServiceProvider
             return $this->command('tenants:run', array_filter([$command, '--queue' => $queue]));
         });
 
+        if ($config->get('tenancy.api.enabled')) {
+            Http\ApiRoutes::register($this->app['router']);
+        }
+
         if ($config->get('tenancy.domains.tls_ask.enabled')) {
             $this->app['router']->get($config->get('tenancy.domains.tls_ask.path'), Http\Controllers\TlsAskController::class)->name('tenancy.tls.ask');
         }
@@ -104,6 +108,7 @@ final class TenancyServiceProvider extends ServiceProvider
                 Console\ExportCommand::class,
                 Console\ImportCommand::class,
                 Console\VerifyDomainsCommand::class,
+                Console\PromoteCommand::class,
             ]);
         }
     }

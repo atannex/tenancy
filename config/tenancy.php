@@ -181,6 +181,13 @@ return [
         ],
     ],
 
+    // The JSON management API, on central domains only. Off by default; guard it well.
+    'api' => [
+        'enabled' => false,
+        'prefix' => 'tenancy-api',
+        'middleware' => ['api', 'auth:sanctum', 'abilities:tenancy:manage'],
+    ],
+
     'migrations' => [
         // Tenant migrations. Shared-tier tenants get them once on the central database.
         'paths' => [database_path('migrations/tenant')],

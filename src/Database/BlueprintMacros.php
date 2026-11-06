@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Atannex\Tenancy\Database;
 
-use Atannex\Tenancy\Enums\IsolationTier;
 use Atannex\Tenancy\Tenancy;
 use Illuminate\Database\Schema\Blueprint;
 
@@ -14,14 +13,14 @@ final class BlueprintMacros
     {
         /**
          * $table->tenant(): indexed tenant key column. Constrained to the tenants
-         * table on the shared tier; left unconstrained inside a dedicated
-         * tenant database, where the tenants table does not exist.
+         * table when migrating the central database; left unconstrained in a
+         * dedicated tenant database, where the tenants table does not exist.
          */
         Blueprint::macro('tenant', function (?string $column = null, ?bool $constrained = null) {
             /** @var Blueprint $this */
             $column ??= (string) config('tenancy.database.tenant_column', 'tenant_id');
-            $current = app(Tenancy::class)->current();
-            $constrained ??= $current === null || $current->isolationTier() === IsolationTier::Shared;
+            // Constrain only on the central database, where the tenants table lives.
+            $constrained ??= $this->connection->getName() === app(Tenancy::class)->centralConnection();
 
             $definition = match (config('tenancy.database.key_type', 'ulid')) {
                 'uuid' => $this->foreignUuid($column),

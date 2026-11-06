@@ -48,6 +48,7 @@ final class TenancyModulesServiceProvider extends ServiceProvider
     public function boot(): void
     {
         $this->app['router']->aliasMiddleware('tenant.feature', Http\Middleware\EnsureFeature::class);
+        $this->app['router']->aliasMiddleware('tenant.member', Http\Middleware\EnsureMember::class);
 
         $this->callAfterResolving('blade.compiler', function ($blade): void {
             $blade->if('tenantFeature', fn (string $feature) => $this->app->make(Features::class)->active($feature));

@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Atannex\Tenancy\Console;
 
+use Atannex\Tenancy\Isolation\TenantDatabase;
+use Atannex\Tenancy\Models\Domain;
 use Atannex\Tenancy\Support\IsolationAudit;
 use Atannex\Tenancy\Tenancy;
 use Illuminate\Console\Command;
@@ -30,8 +32,8 @@ final class DoctorCommand extends Command
         });
 
         $this->check('Tenant tables', fn () => Schema::connection($connection)->hasTable('tenants') && Schema::connection($connection)->hasTable('tenant_domains')
-            ? 'migrated'
-            : throw new \RuntimeException('run php artisan migrate'));
+                ? 'migrated'
+                : throw new \RuntimeException('run php artisan migrate'));
 
         $this->check('Tenant model', fn () => $tenancy->model().' ('.$tenancy->query()->count().' tenants)');
 
@@ -52,6 +54,28 @@ final class DoctorCommand extends Command
         $central = (array) config('tenancy.identification.central_domains', []);
         $this->warnUnless('Central domains', $central !== [] || ! in_array('subdomain', (array) config('tenancy.identification.resolvers', []), true),
             $central === [] ? 'none' : implode(', ', $central), 'none set, so the subdomain resolver can never match');
+
+        $this->check('Provisioning', function () use ($tenancy) {
+            $stuck = $tenancy->query()->where('status', 'provisioning')->where('updated_at', '<', now()->subHour())->count();
+            $failed = $tenancy->query()->where('status', 'failed')->count();
+
+            return $stuck > 0 ? throw new \RuntimeException("{$stuck} tenant(s) stuck provisioning for over an hour") : "{$failed} failed (tenants:retry)";
+        });
+
+        $this->check('Dedicated databases', function () use ($tenancy) {
+            $missing = [];
+            $count = 0;
+
+            $tenancy->each(function ($tenant) use (&$missing, &$count): void {
+                $count++;
+                app(TenantDatabase::class)->exists($tenant) || $missing[] = $tenant->getTenantSlug();
+            }, fn ($q) => $q->where('status', 'active')->where('isolation', '!=', 'shared'));
+
+            return $missing === [] ? "{$count} reachable" : throw new \RuntimeException('missing for '.implode(', ', $missing));
+        });
+
+        $unverified = Domain::query()->whereNull('verified_at')->count();
+        $this->warnUnless('Custom domains', $unverified === 0, 'all verified', "{$unverified} waiting for DNS verification");
 
         $this->check('Isolation audit', function () {
             $problems = IsolationAudit::run();
