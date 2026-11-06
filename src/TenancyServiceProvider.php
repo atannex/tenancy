@@ -193,15 +193,26 @@ final class TenancyServiceProvider extends ServiceProvider
     }
 
     /**
-     * The package migrations, minus any the app has published (matched by name
-     * without the timestamp, since publishing renames them).
+     * The package migrations, minus any the app has published. A published
+     * copy has the same name without the timestamp (publishing renames it) and
+     * identifies itself: the "Published by atannex/tenancy" marker, or, for
+     * copies published by 1.0.0, the central connection key it reads. Another
+     * package's migration of the same name does not count.
      *
      * @return list<string>
      */
     public static function packageMigrations(string $appFolder): array
     {
-        $strip = fn (string $file) => preg_replace('/^\d{4}_\d{2}_\d{2}_\d{6}_/', '', basename($file));
-        $published = array_map($strip, glob($appFolder.'/*.php') ?: []);
+        $strip = fn (string $file) => (string) preg_replace('/^\d{4}_\d{2}_\d{2}_\d{6}_/', '', basename($file));
+        $published = [];
+
+        foreach (glob($appFolder.'/*.php') ?: [] as $file) {
+            $contents = (string) @file_get_contents($file);
+
+            if (str_contains($contents, 'atannex/tenancy') || str_contains($contents, 'tenancy.database.central_connection')) {
+                $published[] = $strip($file);
+            }
+        }
 
         return array_values(array_filter(
             glob(__DIR__.'/../database/migrations/*.php') ?: [],

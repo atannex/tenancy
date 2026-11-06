@@ -1,5 +1,9 @@
 # Changelog
 
+## [1.0.1] - 2026-11-06
+
+- A package migration is skipped only when the app holds a copy published from this package. The copy is recognised by the new "Published by atannex/tenancy" marker, or by the central connection key it reads, so copies published by 1.0.0 still count. Another package's migration with the same name no longer hides it.
+
 ## [1.0.0] - 2026-11-06
 
 First release.

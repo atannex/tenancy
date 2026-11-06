@@ -7,6 +7,7 @@ use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
 /** Ties Sanctum tokens to a tenant (published with tenancy-sanctum-migrations). Tokens stay central. */
+/** Published by atannex/tenancy. */
 return new class extends Migration
 {
     public function getConnection(): ?string

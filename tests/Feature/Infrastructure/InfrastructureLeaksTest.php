@@ -199,7 +199,8 @@ it('does not load package migrations that were published into the app', function
     $folder = database_path('migrations');
     File::ensureDirectoryExists($folder);
     $published = $folder.'/2030_01_01_000000_create_tenants_table.php';
-    File::put($published, '<?php return new class extends Illuminate\Database\Migrations\Migration { public function up(): void {} };');
+    // A copy published by 1.0.0: recognised by the config key it reads.
+    File::put($published, "<?php return new class extends Illuminate\\Database\\Migrations\\Migration { public function getConnection(): ?string { return config('tenancy.database.central_connection'); } public function up(): void {} };");
 
     try {
         $paths = TenancyServiceProvider::packageMigrations($folder);
@@ -257,4 +258,30 @@ it('reports unpinned infrastructure in the doctor', function () {
     config(['tenancy.database.pin_infrastructure' => true]);
     TenancyServiceProvider::pinInfrastructure(app('config'));
     expect(DoctorCommand::unpinnedInfrastructure())->toBe([]);
+});
+
+it('recognises published copies by their marker', function () {
+    $folder = sys_get_temp_dir().'/atx-published-'.uniqid();
+    File::ensureDirectoryExists($folder);
+    File::put($folder.'/2030_01_01_000000_create_tenant_usage_table.php', "<?php\n/** Published by atannex/tenancy. */\nreturn new class extends Illuminate\\Database\\Migrations\\Migration { public function up(): void {} };");
+
+    try {
+        expect(array_map('basename', TenancyServiceProvider::packageMigrations($folder)))
+            ->not->toContain('2026_11_06_100002_create_tenant_usage_table.php');
+    } finally {
+        File::deleteDirectory($folder);
+    }
+});
+
+it('still loads its own migration when another package has one of the same name', function () {
+    $folder = sys_get_temp_dir().'/atx-published-'.uniqid();
+    File::ensureDirectoryExists($folder);
+    File::put($folder.'/2025_01_01_000000_create_tenants_table.php', "<?php return new class extends Illuminate\\Database\\Migrations\\Migration { public function up(): void { Schema::create('tenants', fn (\$t) => \$t->id()); } };");
+
+    try {
+        expect(array_map('basename', TenancyServiceProvider::packageMigrations($folder)))
+            ->toContain('2026_11_06_000001_create_tenants_table.php');
+    } finally {
+        File::deleteDirectory($folder);
+    }
 });
